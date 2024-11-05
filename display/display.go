@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"ekman.cx/betterping/pinger"
+	"github.com/pcekm/graphping/pinger"
 	gc "github.com/rthornton128/goncurses"
 )
 

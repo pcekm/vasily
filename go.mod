@@ -1,4 +1,4 @@
-module ekman.cx/betterping
+module github.com/pcekm/graphping
 
 go 1.23.2
 

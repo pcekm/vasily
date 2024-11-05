@@ -8,8 +8,8 @@ import (
 	"os/signal"
 	"time"
 
-	"ekman.cx/betterping/display"
-	"ekman.cx/betterping/pinger"
+	"github.com/pcekm/graphping/display"
+	"github.com/pcekm/graphping/pinger"
 )
 
 const (
