@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"syscall"
 	"time"
 
 	"github.com/spf13/pflag"
@@ -62,11 +63,26 @@ func main() {
 
 func initSignals(disp *display.D) {
 	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGABRT, syscall.SIGTSTP, syscall.SIGCONT)
+	var restore func()
 	go func() {
-		<-signals
-		disp.Close()
-		os.Exit(128 + 4) // "Standard" SIGINT exit code.
+		for sig := range signals {
+			switch sig {
+			case syscall.SIGTSTP:
+				restore = disp.TempClose()
+				syscall.Kill(os.Getpid(), syscall.SIGSTOP)
+				continue
+			case syscall.SIGCONT:
+				if restore != nil {
+					restore()
+					restore = nil
+				}
+				continue
+			default:
+				disp.Close()
+				os.Exit(128 + int(sig.(syscall.Signal))) // "Standard" signal exit code.
+			}
+		}
 	}()
 }
 

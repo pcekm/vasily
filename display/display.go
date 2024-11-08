@@ -1,6 +1,7 @@
 // Package display handles the ncurses display.
 package display
 
+// #include <ncurses.h>
 // #include <locale.h>
 import "C"
 
@@ -69,6 +70,21 @@ func (d *D) Close() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	gc.End()
+}
+
+// TempClose temporarily saves and closes the display in order to drop to the
+// terminal. Returns a function that restores the display. All display
+// operations will be blocked until the restore function is called.
+func (d *D) TempClose() func() {
+	d.mu.Lock()
+	// These are not implemented in goncurses.
+	C.def_prog_mode()
+	C.endwin()
+	return func() {
+		C.reset_prog_mode()
+		d.scr.Refresh()
+		d.mu.Unlock()
+	}
 }
 
 // Update updates the screen after making changes.
