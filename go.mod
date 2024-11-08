@@ -4,6 +4,7 @@ go 1.23.2
 
 require (
 	github.com/rthornton128/goncurses v0.0.0-20240804152857-da6485a3b6d7
+	github.com/spf13/pflag v1.0.5
 	golang.org/x/net v0.30.0
 )
 

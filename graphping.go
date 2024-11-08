@@ -1,12 +1,14 @@
 package main
 
 import (
-	"flag"
 	"log"
 	"net"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"time"
+
+	"github.com/spf13/pflag"
 
 	"github.com/pcekm/graphping/display"
 	"github.com/pcekm/graphping/pinger"
@@ -18,12 +20,22 @@ const (
 
 // Flags.
 var (
-	listenAddr = flag.String("listen_addr", "", "Address to listen on.")
-	pathPing   = flag.Bool("path", false, "Ping complete path.")
+	listenAddr  = pflag.StringP("source", "S", "", "Source address.")
+	pathPing    = pflag.Bool("path", false, "Ping complete path.")
+	numeric     = pflag.BoolP("numeric", "n", false, "Only display numeric IP addresses.")
+	crashOutput = pflag.String("crash_output", "", "File to write crash output (useful if it's being corrupted by ncurses).")
 )
 
 func main() {
-	flag.Parse()
+	pflag.Parse()
+
+	if *crashOutput != "" {
+		f, err := os.OpenFile(*crashOutput, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Fatalf("Error opening crash output file %q: %v", *crashOutput, err)
+		}
+		debug.SetCrashOutput(f, debug.CrashOptions{})
+	}
 
 	disp, err := display.New()
 	if err != nil {
@@ -32,14 +44,16 @@ func main() {
 	defer disp.Close()
 	initSignals(disp)
 
-	for _, addrStr := range flag.Args() {
+	for _, addrStr := range pflag.Args() {
 		addr := resolve(addrStr)
 		if *pathPing {
-			for _, a := range trace(addr) {
-				go ping(a, disp)
-			}
+			trace(addr, disp)
 		} else {
-			go ping(addr, disp)
+			idx, err := disp.AppendHost(maybeReverseResolve(addr))
+			if err != nil {
+				log.Fatalf("Error adding new host: %v", err)
+			}
+			go ping(idx, addr, disp)
 		}
 	}
 
@@ -65,31 +79,41 @@ func resolve(addrStr string) *net.UDPAddr {
 	return &net.UDPAddr{IP: addr.IP}
 }
 
-func trace(addr *net.UDPAddr) []*net.UDPAddr {
+// Resolve IP address unless disabled via flag.
+func maybeReverseResolve(addr *net.UDPAddr) string {
+	s := addr.IP.String()
+	if *numeric {
+		return s
+	}
+	names, err := net.LookupAddr(s)
+	if err != nil || len(names) == 0 {
+		return s
+	}
+	return names[0]
+}
+
+func trace(addr *net.UDPAddr, disp *display.D) {
 	p, err := pinger.New(nil)
 	if err != nil {
 		log.Fatalf("Error creating pinger: %v", err)
 	}
-	var res []*net.UDPAddr
 	ch := make(chan pinger.PathComponent)
 	go p.Trace(addr, ch)
 	for p := range ch {
-		res = append(res, p.Host)
+		if err := disp.AddHostAt(p.Pos-1, maybeReverseResolve(p.Host)); err != nil {
+			log.Fatalf("Error ading host: %v", err)
+		}
+		go ping(p.Pos-1, p.Host, disp)
 	}
-	return res
 }
 
-func ping(dest *net.UDPAddr, disp *display.D) {
+func ping(dispIdx int, dest *net.UDPAddr, disp *display.D) {
 	p, err := pinger.New(nil)
 	if err != nil {
 		log.Fatalf("Error creating pinger: %v", err)
 	}
 	defer p.Close()
 
-	idx, err := disp.AddHost(dest.IP.String())
-	if err != nil {
-		log.Fatalf("Error adding host: %v", err)
-	}
 	tick := time.Tick(time.Second)
 	var avg time.Duration
 	var failures, count int
@@ -108,7 +132,7 @@ func ping(dest *net.UDPAddr, disp *display.D) {
 			avg = cur
 		}
 		avg = 90*avg/100 + 10*cur/100
-		disp.UpdateHost(idx, r.Type, float64(failures)/float64(count), cur, avg)
+		disp.UpdateHost(dispIdx, r.Type, float64(failures)/float64(count), cur, avg)
 		disp.Update()
 
 		<-tick

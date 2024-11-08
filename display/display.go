@@ -6,6 +6,7 @@ import "C"
 
 import (
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -17,9 +18,9 @@ const (
 	// Duration at which a ping latency displays at maximum height.
 	graphMax = 250 * time.Millisecond
 
-	hostCols      = 15
+	hostCols      = 30
 	bodyStartLine = 1
-	latencySpace  = 16
+	latencySpace  = 17
 )
 
 var (
@@ -63,6 +64,13 @@ func New() (*D, error) {
 	return d, nil
 }
 
+// Cleans up the display.
+func (d *D) Close() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	gc.End()
+}
+
 // Update updates the screen after making changes.
 func (d *D) Update() {
 	d.mu.Lock()
@@ -74,30 +82,57 @@ func (d *D) Update() {
 func (d *D) DrawHeader() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+
 	d.scr.MovePrint(0, 0, "Host")
-	d.scr.MovePrint(0, hostCols, "Ping Latencies")
+	d.scr.MovePrint(0, hostCols+1, "Ping Latencies")
 }
 
-// Cleans up the display.
-func (d *D) Close() {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	gc.End()
-}
-
-// AddHost adds a host line. Returns the index of the added host.
-func (d *D) AddHost(host string) (int, error) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	idx := len(d.hosts)
-	_, w := d.scr.MaxYX()
-	win, err := gc.NewWindow(1, w-hostCols+1, bodyStartLine+idx, hostCols)
-	if err != nil {
-		return -1, fmt.Errorf("error creating window: %v", err)
+// Truncates s to fit in n chars.
+func maybeTruncateStr(s string, n int) string {
+	if len(s) >= n {
+		return s[:n-1] + "…"
 	}
-	d.hosts = append(d.hosts, win)
-	d.scr.MovePrint(bodyStartLine+idx, 0, host)
-	return idx, nil
+	return s
+}
+
+// AppendHost adds a host line. Returns the index of the added host.
+func (d *D) AppendHost(host string) (int, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.hosts = append(d.hosts, nil)
+	i := len(d.hosts) - 1
+	if err := d.setHost(i, host); err != nil {
+		return -1, err
+	}
+	return i, nil
+}
+
+// AddHostAt adds a host line at the given index. The index does not have to
+// exist and there may be gaps.
+func (d *D) AddHostAt(i int, host string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	return d.setHost(i, host)
+}
+
+// Adds a host at i; panics if d.hosts does not contain that index. Callers must
+// hold d.mu.
+func (d *D) setHost(i int, host string) error {
+	if i >= len(d.hosts) {
+		d.hosts = slices.Grow(d.hosts, i+1)
+		d.hosts = d.hosts[:cap(d.hosts)]
+	}
+	_, w := d.scr.MaxYX()
+	win, err := gc.NewWindow(1, w-hostCols+1, bodyStartLine+i, hostCols+1)
+	if err != nil {
+		return fmt.Errorf("error creating window: %v", err)
+	}
+	d.hosts[i] = win
+	d.scr.MovePrint(bodyStartLine+i, 0, maybeTruncateStr(host, hostCols))
+	d.scr.NoutRefresh()
+	return nil
 }
 
 // UpdateHost adds new information to a host line.
@@ -117,11 +152,11 @@ func (d *D) UpdateHost(hostIndex int, rt pinger.ReplyType, rate float64, cur, av
 		y = 0
 		x = w - 2 - latencySpace
 	}
-	c := bars[int(frac*float32(len(bars)))]
+	c := bars[int(frac*float32(len(bars)-1))]
 	if rt != pinger.EchoReply {
 		c = statuses[rt]
 	}
-	win.MovePrintf(0, w-latencySpace-1, "%3d/%3d ms %3.0f%%", cur.Milliseconds(), avg.Milliseconds(), rate*100)
+	win.MovePrintf(0, w-latencySpace-1, " %3d/%3d ms %3.0f%%", cur.Milliseconds(), avg.Milliseconds(), rate*100)
 	win.MovePrint(y, x, c)
 	win.NoutRefresh()
 }
