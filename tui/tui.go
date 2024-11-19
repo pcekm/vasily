@@ -47,7 +47,7 @@ type Model struct {
 	table      *table.Model
 	conn       *connection.PingConn
 	hosts      []string
-	rowUpdates chan table.UpdateRow
+	rowUpdates chan table.RowKey
 	opts       *Options
 }
 
@@ -57,7 +57,7 @@ func New(conn *connection.PingConn, hosts []string, opts *Options) (*Model, erro
 		table:      table.New(),
 		conn:       conn,
 		hosts:      hosts,
-		rowUpdates: make(chan table.UpdateRow),
+		rowUpdates: make(chan table.RowKey),
 		opts:       opts,
 	}
 	return m, nil
@@ -71,7 +71,7 @@ func (m *Model) Close() error {
 
 // Init initializes the model.
 func (m *Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{m.nextRowUpdateCmd()}
+	cmds := []tea.Cmd{m.readNextRow()}
 	for i, h := range m.hosts {
 		addr, err := lookup.String(h)
 		if err != nil {
@@ -80,7 +80,7 @@ func (m *Model) Init() tea.Cmd {
 		if m.opts.trace() {
 			cmds = append(cmds, m.startTraceCmd(addr))
 		} else {
-			cmds = append(cmds, m.startPingerCmd(i+1, h, addr))
+			cmds = append(cmds, m.startPingerCmd(table.RowKey{Index: i + 1, Group: h}, addr))
 		}
 	}
 	return tea.Batch(cmds...)
@@ -93,9 +93,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		cmds = append(cmds, m.updateKeyMsg(msg))
-	case table.UpdateRow:
-		cmds = append(cmds, m.nextRowUpdateCmd())
+		cmds = append(cmds, m.handleKeyMsg(msg))
+	case table.RowUpdated:
+		cmds = append(cmds, m.readNextRow())
 	case traceStepMsg:
 		cmds = append(cmds, m.updateTraceStep(msg))
 	case error:
@@ -104,28 +104,27 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m *Model) nextRowUpdateCmd() tea.Cmd {
+func (m *Model) readNextRow() tea.Cmd {
 	return func() tea.Msg {
-		return <-m.rowUpdates
+		return table.RowUpdated{Key: <-m.rowUpdates}
 	}
 }
 
 // Returns a command that starts running a new ping.
-// TODO: Dest and target are confusing. idx and dest are for internal
-// identification and sorting, target is what actually gets pinged.
-func (m *Model) startPingerCmd(idx int, dest string, target net.Addr) tea.Cmd {
+func (m *Model) startPingerCmd(key table.RowKey, target net.Addr) tea.Cmd {
 	return func() tea.Msg {
 		opts := *m.opts.pingerOpts()
 		opts.Callback = func(int, pinger.PingResult) {
-			m.rowUpdates <- table.UpdateRow{Index: idx, Target: dest}
+			m.rowUpdates <- key
 		}
 		ping := pinger.Ping(m.conn, target, &opts)
 		go ping.Run()
-		return table.Row{
-			Index:       idx,
-			Target:      dest,
-			DisplayHost: lookup.Addr(target),
-			Pinger:      ping,
+		return table.AddRow{
+			Row: table.Row{
+				RowKey:      key,
+				DisplayHost: lookup.Addr(target),
+				Pinger:      ping,
+			},
 		}
 	}
 }
@@ -161,12 +160,12 @@ func (m *Model) nextTraceCmd(dest string, ch <-chan tracer.Step) tea.Cmd {
 func (m *Model) updateTraceStep(msg traceStepMsg) tea.Cmd {
 	tea.Batch()
 	return tea.Batch(
-		m.startPingerCmd(msg.step.Pos, msg.host, msg.step.Host),
+		m.startPingerCmd(table.RowKey{Index: msg.step.Pos, Group: msg.host}, msg.step.Host),
 		m.nextTraceCmd(msg.host, msg.next),
 	)
 }
 
-func (m *Model) updateKeyMsg(msg tea.KeyMsg) tea.Cmd {
+func (m *Model) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "ctrl+c", "q":
 		return tea.Quit

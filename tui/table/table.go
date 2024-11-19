@@ -22,8 +22,6 @@ const (
 
 	// Duration at which a ping latency displays at maximum height.
 	graphMax = 250 * time.Millisecond
-
-	resultTitle = "Latency"
 )
 
 type columnID int
@@ -32,7 +30,7 @@ type columnID int
 const (
 	colIndex columnID = iota
 	colHost
-	colLatency
+	colResults
 	colAvgMs
 	colPctLoss
 )
@@ -43,8 +41,8 @@ func (c columnID) String() string {
 		return "colIndex"
 	case colHost:
 		return "colHost"
-	case colLatency:
-		return "colLatency"
+	case colResults:
+		return "colResults"
 	case colAvgMs:
 		return "colAvgMs"
 	case colPctLoss:
@@ -68,7 +66,7 @@ var (
 	columns = map[columnID]columnSpec{
 		colIndex:   {Title: "", Width: 3},
 		colHost:    {Title: "Host", Width: 1.0 / 3.0},
-		colLatency: {Title: resultTitle, Width: 2.0 / 3.0},
+		colResults: {Title: "Results", Width: 2.0 / 3.0},
 		colAvgMs:   {Title: "AvgMs", Width: 5},
 		colPctLoss: {Title: "%Loss", Width: 5},
 	}
@@ -85,14 +83,7 @@ var (
 
 // Row holds information about pings to a single host.
 type Row struct {
-	// Index is the index number displayed in the table. Typically a hop number
-	// in a traceroute.
-	Index int
-
-	// Target is the hostname or IP identifying the target. This is only used for
-	// identifcation purposes. The displayed name is determined by the peer
-	// address of the response.
-	Target string
+	RowKey
 
 	// DisplayHost is the hostname or IP address to display.
 	DisplayHost string
@@ -132,28 +123,46 @@ func (r Row) latencyChart(chartWidth int) string {
 	return strings.Join(chars, "")
 }
 
-// Compares two rows for display order.
 func cmpRows(a, b Row) int {
-	if a.Target < b.Target {
+	return cmpRowKeys(a.RowKey, b.RowKey)
+}
+
+// AddRow is a message to add a new row.
+type AddRow struct {
+	// Row is the new row to add.
+	Row Row
+}
+
+// RowUpdated is a message that a row has been updated.
+type RowUpdated struct {
+	// Key is the row key that was updated.
+	Key RowKey
+}
+
+// RowKey uniquely identifies a row.
+type RowKey struct {
+	// Group is used to group related pings, such as all the hosts in a path.
+	Group string
+
+	// Index is the numeric index of the row.
+	Index int
+}
+
+func cmpRowKeys(a, b RowKey) int {
+	if a.Group < b.Group {
 		return -1
-	} else if a.Target > b.Target {
+	} else if a.Group > b.Group {
 		return 1
 	}
 	return cmp.Compare(a.Index, b.Index)
 }
 
-// UpdateRow is a message to update a row in the table.
-type UpdateRow struct {
-	Target string
-	Index  int
-}
-
 // Model contains the table information.
 type Model struct {
-	table         table.Model
-	fixedWidth    int
-	resultColumns int
-	rows          []Row
+	table          table.Model
+	fixedWidth     int
+	latencyColumns int
+	rows           []Row
 }
 
 // New makes an empty ping result table with headers.
@@ -189,22 +198,22 @@ func (t *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		t.handleResize(msg)
-	case Row:
-		cmds = append(cmds, t.handleRow(msg))
-	case UpdateRow:
-		cmds = append(cmds, t.handleUpdateRow(msg))
+	case AddRow:
+		cmds = append(cmds, t.handleAddRow(msg))
+	case RowUpdated:
+		cmds = append(cmds, t.handleRowUpdated(msg))
 	}
 	return tea.Batch(cmds...)
 }
 
-func (t *Model) handleRow(r Row) tea.Cmd {
-	t.rows = append(t.rows, r)
+func (t *Model) handleAddRow(ar AddRow) tea.Cmd {
+	t.rows = append(t.rows, ar.Row)
 	slices.SortStableFunc(t.rows, cmpRows)
 	t.updateRows()
 	return nil
 }
 
-func (t *Model) handleUpdateRow(_ UpdateRow) tea.Cmd {
+func (t *Model) handleRowUpdated(_ RowUpdated) tea.Cmd {
 	// TODO: Actually just update one row?
 	t.updateRows()
 	return nil
@@ -223,15 +232,15 @@ func (t *Model) handleResize(msg tea.WindowSizeMsg) {
 		case float64:
 			tCols[id].Width = int(math.Round(math.Max(minColWidth, w*availSpace)))
 		}
-		if tCols[id].Title == resultTitle {
-			t.resultColumns = tCols[id].Width
+		if id == colResults {
+			t.latencyColumns = tCols[id].Width
 		}
 	}
 	t.table.SetColumns(tCols)
 }
 
 func (t *Model) updateRows() {
-	latencyWidth := t.table.Columns()[colLatency].Width
+	latencyWidth := t.table.Columns()[colResults].Width
 	rows := make([]table.Row, len(t.rows))
 	for i, r := range t.rows {
 		rows[i] = r.CellViews(latencyWidth)
