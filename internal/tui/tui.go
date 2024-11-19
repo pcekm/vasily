@@ -45,17 +45,19 @@ type traceStepMsg struct {
 // Model is the main text UI model.
 type Model struct {
 	table      *table.Model
-	conn       *connection.PingConn
+	connV4     *connection.PingConn
+	connV6     *connection.PingConn
 	hosts      []string
 	rowUpdates chan table.RowKey
 	opts       *Options
 }
 
 // New creates a new model.
-func New(conn *connection.PingConn, hosts []string, opts *Options) (*Model, error) {
+func New(connV4, connV6 *connection.PingConn, hosts []string, opts *Options) (*Model, error) {
 	m := &Model{
 		table:      table.New(),
-		conn:       conn,
+		connV4:     connV4,
+		connV6:     connV6,
 		hosts:      hosts,
 		rowUpdates: make(chan table.RowKey),
 		opts:       opts,
@@ -110,6 +112,18 @@ func (m *Model) readNextRow() tea.Cmd {
 	}
 }
 
+func (m *Model) connForAddr(addr net.Addr) *connection.PingConn {
+	udpAddr, ok := addr.(*net.UDPAddr)
+	if !ok {
+		// This should never happen.
+		log.Panicf("Wrong address type: %#v", addr)
+	}
+	if udpAddr.IP.To4() == nil {
+		return m.connV6
+	}
+	return m.connV4
+}
+
 // Returns a command that starts running a new ping.
 func (m *Model) startPingerCmd(key table.RowKey, target net.Addr) tea.Cmd {
 	return func() tea.Msg {
@@ -117,7 +131,7 @@ func (m *Model) startPingerCmd(key table.RowKey, target net.Addr) tea.Cmd {
 		opts.Callback = func(int, pinger.PingResult) {
 			m.rowUpdates <- key
 		}
-		ping := pinger.Ping(m.conn, target, &opts)
+		ping := pinger.Ping(m.connForAddr(target), target, &opts)
 		go ping.Run()
 		return table.AddRow{
 			Row: table.Row{
@@ -133,7 +147,7 @@ func (m *Model) startTraceCmd(addr net.Addr) tea.Cmd {
 	ch := make(chan tracer.Step)
 	return tea.Batch(
 		func() tea.Msg {
-			err := tracer.TraceRoute(m.conn, addr, ch)
+			err := tracer.TraceRoute(m.connForAddr(addr), addr, ch)
 			if err != nil {
 				return fmt.Errorf("traceroute: %v: %v", addr, err)
 			}

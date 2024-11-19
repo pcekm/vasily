@@ -34,8 +34,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// TODO: Support IPv6.
-	v4conn, _ := newPingConns()
+	connV4, connV6 := newPingConns()
 
 	if *logfile != "" {
 		logf, err := tea.LogToFile(*logfile, "")
@@ -48,7 +47,7 @@ func main() {
 	opts := &tui.Options{
 		Trace: *pingPath,
 	}
-	tbl, err := tui.New(v4conn, pflag.Args(), opts)
+	tbl, err := tui.New(connV4, connV6, pflag.Args(), opts)
 	if err != nil {
 		log.Fatalf("Error initializing UI: %v", err)
 	}
@@ -63,5 +62,9 @@ func newPingConns() (*connection.PingConn, *connection.PingConn) {
 	if err != nil {
 		log.Fatalf("Error opening IPv4 connection: %v", err)
 	}
-	return v4, nil
+	v6, err := connection.New("udp6", *listenAddr)
+	if err != nil {
+		log.Fatalf("Error opening IPv6 connection: %v", err)
+	}
+	return v4, v6
 }
