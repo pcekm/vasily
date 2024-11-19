@@ -15,10 +15,6 @@ import (
 	"github.com/pcekm/graphping/internal/tui"
 )
 
-const (
-	icmpProtoNum = 1
-)
-
 // Flags.
 var (
 	listenAddr = pflag.StringP("source", "S", "", "Source address.")
