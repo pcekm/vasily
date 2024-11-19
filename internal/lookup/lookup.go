@@ -10,6 +10,13 @@ import (
 	"net"
 )
 
+// Package flags.
+var (
+	// NumericMode is set to true to disable address to hostname resolution.
+	// Addresses will instead be simply converted to strings.
+	NumericMode = false
+)
+
 // Addr finds the name for a given address, or returns the address itself as
 // a string if no name can be found. If multiple names are found, this returns
 // the first.
@@ -24,6 +31,9 @@ func Addr(addr net.Addr) string {
 		ipstr = addr.IP.String()
 	default:
 		return addr.String()
+	}
+	if NumericMode {
+		return ipstr
 	}
 	names, err := net.LookupAddr(ipstr)
 	if err != nil || len(names) == 0 {

@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/pflag"
 
+	"github.com/pcekm/graphping/internal/lookup"
 	"github.com/pcekm/graphping/internal/ping/connection"
 	"github.com/pcekm/graphping/internal/tui"
 )
@@ -22,9 +23,13 @@ const (
 var (
 	listenAddr = pflag.StringP("source", "S", "", "Source address.")
 	pingPath   = pflag.Bool("path", false, "Ping complete path.")
-	// numeric     = pflag.BoolP("numeric", "n", false, "Only display numeric IP addresses.")
-	logfile = pflag.String("logfile", "/dev/null", "File to output logs.")
+	logfile    = pflag.String("logfile", "/dev/null", "File to output logs.")
 )
+
+// FlagVars.
+func init() {
+	pflag.BoolVarP(&lookup.NumericMode, "numeric", "n", false, "Only display numeric IP addresses.")
+}
 
 func main() {
 	pflag.Parse()
