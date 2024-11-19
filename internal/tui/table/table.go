@@ -64,7 +64,7 @@ type columnSpec struct {
 
 var (
 	columns = map[columnID]columnSpec{
-		colIndex:   {Title: "", Width: 3},
+		colIndex:   {Title: "Hop", Width: 3},
 		colHost:    {Title: "Host", Width: 1.0 / 3.0},
 		colResults: {Title: "Results", Width: 2.0 / 3.0},
 		colAvgMs:   {Title: "AvgMs", Width: 5},
@@ -95,8 +95,12 @@ type Row struct {
 // CellViews returns views for each cell in the table row.
 func (r Row) CellViews(chartWidth int) table.Row {
 	st := r.Pinger.Stats()
+	idx := "-"
+	if r.Index != 0 {
+		idx = fmt.Sprintf("%2d.", r.Index)
+	}
 	return table.Row{
-		fmt.Sprintf("%2d.", r.Index),
+		idx,
 		r.DisplayHost,
 		r.latencyChart(chartWidth),
 		fmt.Sprintf("%5d", st.AvgLatency.Milliseconds()),

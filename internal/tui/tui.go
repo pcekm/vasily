@@ -74,7 +74,7 @@ func (m *Model) Close() error {
 // Init initializes the model.
 func (m *Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.readNextRow()}
-	for i, h := range m.hosts {
+	for _, h := range m.hosts {
 		addr, err := lookup.String(h)
 		if err != nil {
 			log.Printf("Error looking up %q: %v", h, err)
@@ -82,7 +82,7 @@ func (m *Model) Init() tea.Cmd {
 		if m.opts.trace() {
 			cmds = append(cmds, m.startTraceCmd(addr))
 		} else {
-			cmds = append(cmds, m.startPingerCmd(table.RowKey{Index: i + 1, Group: h}, addr))
+			cmds = append(cmds, m.startPingerCmd(table.RowKey{Group: h}, addr))
 		}
 	}
 	return tea.Batch(cmds...)
