@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/pcekm/graphping/ping/util"
+	"github.com/pcekm/graphping/internal/ping/util"
 )
 
 var (

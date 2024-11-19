@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pcekm/graphping/ping/connection"
-	"github.com/pcekm/graphping/ping/util"
+	"github.com/pcekm/graphping/internal/ping/connection"
+	"github.com/pcekm/graphping/internal/ping/util"
 )
 
 const (

@@ -1,3 +1,6 @@
+// Command graphping is a ping utility that displays pings to multiple hosts in
+// a concise bargraph format. It can also ping the entire path to a remote host
+// with the --path flag.
 package main
 
 import (
@@ -7,8 +10,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/pflag"
 
-	"github.com/pcekm/graphping/ping/connection"
-	"github.com/pcekm/graphping/tui"
+	"github.com/pcekm/graphping/internal/ping/connection"
+	"github.com/pcekm/graphping/internal/tui"
 )
 
 const (

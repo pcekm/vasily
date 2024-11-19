@@ -8,11 +8,11 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/pcekm/graphping/lookup"
-	"github.com/pcekm/graphping/ping/connection"
-	"github.com/pcekm/graphping/ping/pinger"
-	"github.com/pcekm/graphping/ping/tracer"
-	"github.com/pcekm/graphping/tui/table"
+	"github.com/pcekm/graphping/internal/lookup"
+	"github.com/pcekm/graphping/internal/ping/connection"
+	"github.com/pcekm/graphping/internal/ping/pinger"
+	"github.com/pcekm/graphping/internal/ping/tracer"
+	"github.com/pcekm/graphping/internal/tui/table"
 )
 
 // Options contain main program options.

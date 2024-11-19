@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/pcekm/graphping/ping/connection"
-	"github.com/pcekm/graphping/ping/test"
+	"github.com/pcekm/graphping/internal/ping/connection"
+	"github.com/pcekm/graphping/internal/ping/test"
 )
 
 func hopAddr(hop int) *net.UDPAddr {

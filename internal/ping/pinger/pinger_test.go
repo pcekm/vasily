@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/pcekm/graphping/ping/connection"
-	"github.com/pcekm/graphping/ping/test"
-	"github.com/pcekm/graphping/ping/util"
+	"github.com/pcekm/graphping/internal/ping/connection"
+	"github.com/pcekm/graphping/internal/ping/test"
+	"github.com/pcekm/graphping/internal/ping/util"
 )
 
 // Compares two durations to the nearest millisecond.
