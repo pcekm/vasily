@@ -85,11 +85,12 @@ var (
 
 	latencyColors = []lipgloss.Style{
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#3abb46")).Inline(true),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#75a717")).Inline(true),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#959100")).Inline(true),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#a97a00")).Inline(true),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#b3631a")).Inline(true),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#b44d31")).Inline(true),
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#6faa1e")).Inline(true),
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#8d9800")).Inline(true),
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#a18400")).Inline(true),
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#ae7006")).Inline(true),
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#b45d21")).Inline(true),
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#b34a34")).Inline(true),
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#ab3c45")).Inline(true),
 	}
 	statusErrStyle = lipgloss.NewStyle().
