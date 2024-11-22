@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/ping/util"
+	"github.com/pcekm/graphping/internal/util"
 )
 
 const (

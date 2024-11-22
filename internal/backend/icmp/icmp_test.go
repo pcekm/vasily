@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/ping/util"
+	"github.com/pcekm/graphping/internal/util"
 )
 
 var (

@@ -42,7 +42,7 @@ type PingConn struct {
 //	"ip4:icmp":      Privileged, raw-socket IPv4 ping
 //	"ip6:ipv6-icmp": Privileged, raw socket IPv6 ping
 //
-// Addr is the interface address to lissen on. An empty string means all
+// Addr is the interface address to listen on. An empty string means all
 // interfaces. See icmp.PacketConn.ListenPacket() for more information.
 func New(network string, addr string) (*PingConn, error) {
 	protoNum := icmpV4ProtoNum
@@ -61,6 +61,7 @@ func New(network string, addr string) (*PingConn, error) {
 		icmpType: icmpType,
 		conn:     conn,
 	}
+
 	return p, nil
 }
 

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pcekm/graphping/internal/ping/pinger"
+	"github.com/pcekm/graphping/internal/pinger"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"

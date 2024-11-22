@@ -10,8 +10,8 @@ import (
 
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/lookup"
-	"github.com/pcekm/graphping/internal/ping/pinger"
-	"github.com/pcekm/graphping/internal/ping/tracer"
+	"github.com/pcekm/graphping/internal/pinger"
+	"github.com/pcekm/graphping/internal/tracer"
 	"github.com/pcekm/graphping/internal/tui/table"
 )
 

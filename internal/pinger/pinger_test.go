@@ -12,7 +12,7 @@ import (
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/backend/icmp"
 	"github.com/pcekm/graphping/internal/backend/test"
-	"github.com/pcekm/graphping/internal/ping/util"
+	"github.com/pcekm/graphping/internal/util"
 	"go.uber.org/mock/gomock"
 )
 
