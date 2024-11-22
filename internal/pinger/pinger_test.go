@@ -12,7 +12,6 @@ import (
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/backend/icmp"
 	"github.com/pcekm/graphping/internal/backend/test"
-	"github.com/pcekm/graphping/internal/util"
 	"go.uber.org/mock/gomock"
 )
 
@@ -71,13 +70,12 @@ func TestLive(t *testing.T) {
 }
 
 func TestCallbacks(t *testing.T) {
-	id := util.GenID()
 	addr := test.LoopbackV4
 	ctrl := gomock.NewController(t)
 	conn := test.NewMockConn(ctrl)
-	pe := test.NewPingExchange(id, 0)
+	pe := test.NewPingExchange(0)
 	conn.MockPingExchange(pe)
-	pe = test.NewPingExchange(id, 1)
+	pe = test.NewPingExchange(1)
 	conn.MockPingExchange(pe)
 	conn.MockClose()
 
@@ -87,7 +85,6 @@ func TestCallbacks(t *testing.T) {
 		NPings:   2,
 		Interval: time.Microsecond,
 		History:  2,
-		ID:       id,
 		Timeout:  time.Millisecond,
 		Callback: func(seq int, res PingResult) {
 			mu.Lock()
@@ -120,12 +117,11 @@ func TestCallbacks(t *testing.T) {
 }
 
 func TestPacketLoss(t *testing.T) {
-	id := util.GenID()
 	ctrl := gomock.NewController(t)
 	conn := test.NewMockConn(ctrl)
-	pe := test.NewPingExchange(id, 0).SetNoReply(true)
+	pe := test.NewPingExchange(0).SetNoReply(true)
 	conn.MockPingExchange(pe)
-	pe = test.NewPingExchange(id, 1)
+	pe = test.NewPingExchange(1)
 	conn.MockPingExchange(pe)
 	conn.MockClose()
 
@@ -133,7 +129,6 @@ func TestPacketLoss(t *testing.T) {
 		NPings:   2,
 		Interval: time.Microsecond,
 		History:  2,
-		ID:       id,
 		Timeout:  time.Millisecond,
 	}
 	p, err := New(newConnFunc(conn), test.LoopbackV4, opts)
@@ -164,14 +159,13 @@ func TestPacketLoss(t *testing.T) {
 }
 
 func TestDuplicatePacket(t *testing.T) {
-	id := util.GenID()
 	ctrl := gomock.NewController(t)
 	conn := test.NewMockConn(ctrl)
-	pe := test.NewPingExchange(id, 0)
+	pe := test.NewPingExchange(0)
 	conn.MockPingExchange(pe)
-	pe = test.NewPingExchange(id, 1)
+	pe = test.NewPingExchange(1)
 	conn.MockPingExchange(pe)
-	pe = test.NewPingExchange(id, 2)
+	pe = test.NewPingExchange(2)
 	pe.RecvPkt.Seq = 0
 	conn.MockPingExchange(pe)
 	conn.MockClose()
@@ -180,7 +174,6 @@ func TestDuplicatePacket(t *testing.T) {
 		NPings:   3,
 		Interval: time.Microsecond,
 		History:  3,
-		ID:       id,
 		Timeout:  time.Millisecond,
 	}
 	p, err := New(newConnFunc(conn), test.LoopbackV4, opts)
@@ -340,11 +333,10 @@ func TestHistory(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("nPings=%d/nHist=%d", c.nPings, c.nHist), func(t *testing.T) {
-			id := util.GenID()
 			ctrl := gomock.NewController(t)
 			conn := test.NewMockConn(ctrl)
 			for seq := 0; seq < c.nPings; seq++ {
-				conn.MockPingExchange(test.NewPingExchange(id, seq).SetPeer(mkAddr(seq)))
+				conn.MockPingExchange(test.NewPingExchange(seq).SetPeer(mkAddr(seq)))
 			}
 			conn.MockClose()
 
@@ -352,7 +344,6 @@ func TestHistory(t *testing.T) {
 				NPings:   c.nPings,
 				Interval: time.Millisecond,
 				History:  c.nHist,
-				ID:       id,
 				Timeout:  4 * time.Millisecond,
 			}
 			p, err := New(newConnFunc(conn), test.LoopbackV4, opts)
@@ -376,41 +367,4 @@ func TestHistory(t *testing.T) {
 			ctrl.Finish()
 		})
 	}
-}
-
-func TestWrongIDRejection(t *testing.T) {
-	const (
-		id1 = 1
-		id2 = 2
-	)
-	ctrl := gomock.NewController(t)
-	conn := test.NewMockConn(ctrl)
-	pe := test.NewPingExchange(id1, 0)
-	pe.RecvPkt.ID = id2
-	conn.MockPingExchange(pe)
-	conn.MockClose()
-
-	opts := &Options{
-		NPings:   1,
-		Interval: time.Microsecond,
-		ID:       id1,
-		Timeout:  100 * time.Microsecond,
-	}
-	p, err := New(newConnFunc(conn), test.LoopbackV4, opts)
-	if err != nil {
-		t.Fatalf("Error creating pinger: %v", err)
-	}
-	if !test.WithTimeout(p.Run, time.Second) {
-		t.Error("Timed out waiting for pinger completion.")
-	}
-	if err := p.Close(); err != nil {
-		t.Errorf("Error closing pinger: %v", err)
-	}
-
-	want := []PingResult{{Type: Dropped}}
-	if diff := diffPingResults(want, p.History()); diff != "" {
-		t.Errorf("Wrong results (-want, +got):\n%v", diff)
-	}
-
-	ctrl.Finish()
 }

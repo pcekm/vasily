@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/pcekm/graphping/internal/backend"
+	"github.com/pcekm/graphping/internal/util"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
@@ -26,6 +28,7 @@ const (
 type PingConn struct {
 	protoNum int
 	icmpType icmp.Type
+	pingID   int
 
 	mu sync.RWMutex
 	// Write operations are locked so that TTL can be set and reset atomically.
@@ -56,13 +59,30 @@ func New(network string, addr string) (*PingConn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("listen error: %v", err)
 	}
+	pingID, err := pingID(conn)
+	if err != nil {
+		return nil, err
+	}
 	p := &PingConn{
 		protoNum: protoNum,
 		icmpType: icmpType,
+		pingID:   pingID,
 		conn:     conn,
 	}
 
 	return p, nil
+}
+
+// Gets the ICMP id for this session.
+func pingID(conn *icmp.PacketConn) (int, error) {
+	switch runtime.GOOS {
+	case "darwin":
+		return util.GenID(), nil
+	case "linux":
+		return conn.LocalAddr().(*net.UDPAddr).Port, nil
+	default:
+		return 0, fmt.Errorf("unsupported OS: %v", runtime.GOOS)
+	}
 }
 
 // Close closes the connection.
@@ -163,7 +183,7 @@ func (p *PingConn) baseWriteTo(pkt *backend.Packet, dest net.Addr) error {
 		Type: p.icmpType,
 		Code: 0,
 		Body: &icmp.Echo{
-			ID:   pkt.ID,
+			ID:   p.pingID,
 			Seq:  pkt.Seq,
 			Data: pkt.Payload,
 		},
@@ -179,7 +199,7 @@ func (p *PingConn) baseWriteTo(pkt *backend.Packet, dest net.Addr) error {
 	return nil
 }
 
-// Reads an ICMP echo reponse.
+// Reads an ICMP echo response.
 func (p *PingConn) ReadFrom() (*backend.Packet, net.Addr, error) {
 	buf := make([]byte, maxMTU)
 	for {
@@ -200,28 +220,33 @@ func (p *PingConn) ReadFrom() (*backend.Packet, net.Addr, error) {
 			//  - Does it happen pinging something other than the loopback?
 			//  - Does it happen on Linux?
 			//  - Does it happen with privileged pings?
-			log.Printf("Unexpectedly received ipv6 echo request: %#v", rm)
 			continue
 		}
 		if rm.Type != ipv4.ICMPTypeEchoReply && rm.Type != ipv6.ICMPTypeEchoReply {
-			pkt, err := icmpMessageToPacket(rm)
+			pkt, id, err := icmpMessageToPacket(rm)
+			// Filter out unrelated IDs.
+			if err == nil && id != p.pingID {
+				continue
+			}
 			return pkt, peer, err
 		}
-		pkt, err := echoToPacket(rm.Body.(*icmp.Echo)), nil
-		return pkt, peer, err
+		pkt, id := echoToPacket(rm.Body.(*icmp.Echo))
+		if id != p.pingID {
+			continue
+		}
+		return pkt, peer, nil
 	}
 }
 
-func echoToPacket(msg *icmp.Echo) *backend.Packet {
+func echoToPacket(msg *icmp.Echo) (*backend.Packet, int) {
 	return &backend.Packet{
 		Type:    backend.PacketReply,
-		ID:      msg.ID,
 		Seq:     msg.Seq,
 		Payload: msg.Data,
-	}
+	}, msg.ID
 }
 
-func icmpMessageToPacket(msg *icmp.Message) (*backend.Packet, error) {
+func icmpMessageToPacket(msg *icmp.Message) (*backend.Packet, int, error) {
 	var packetType backend.PacketType
 	var bodyData []byte
 
@@ -233,23 +258,23 @@ func icmpMessageToPacket(msg *icmp.Message) (*backend.Packet, error) {
 		packetType = backend.PacketDestinationUnreachable
 		bodyData = body.Data
 	default:
-		return nil, fmt.Errorf("unhandled ICMP message: %#v", msg)
+		return nil, 0, fmt.Errorf("unhandled ICMP message: %#v", msg)
 	}
 
 	ipHeader, err := ipv4.ParseHeader(bodyData)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing TimeExceeded header: %v", err)
+		return nil, 0, fmt.Errorf("error parsing TimeExceeded header: %v", err)
 	}
 
 	retICMP, err := icmp.ParseMessage(icmpV4ProtoNum, bodyData[ipHeader.Len:])
 	if err != nil {
-		return nil, fmt.Errorf("error parsing TimeExceeded body: %v", err)
+		return nil, 0, fmt.Errorf("error parsing TimeExceeded body: %v", err)
 	}
 
 	if retICMP.Type != ipv4.ICMPTypeEcho {
-		return nil, fmt.Errorf("unexpected ICMP type: %v", retICMP.Type)
+		return nil, 0, fmt.Errorf("unexpected ICMP type: %v", retICMP.Type)
 	}
-	pkt := echoToPacket(retICMP.Body.(*icmp.Echo))
+	pkt, id := echoToPacket(retICMP.Body.(*icmp.Echo))
 	pkt.Type = packetType
-	return pkt, nil
+	return pkt, id, nil
 }

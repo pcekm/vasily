@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/util"
 )
 
 const (
@@ -42,10 +41,6 @@ type Options struct {
 	// Callback is a function that gets called anytime a new result is
 	// available.
 	Callback CallbackFunc
-
-	// ID is the identifier to use in the ping packet. By default this will be
-	// chosen so that it is random and unique to the process.
-	ID int
 }
 
 func (o *Options) nPings() int {
@@ -81,12 +76,6 @@ func (o *Options) callback() CallbackFunc {
 		return func(int, PingResult) {}
 	}
 	return o.Callback
-}
-
-func (o *Options) id() int {
-	// We don't do the default here since o might be nil, and we won't be able
-	// to store the result of util.GenID() in that case.
-	return o.ID
 }
 
 // ResultType is the type of reply received. This is a high-level view. More
@@ -180,7 +169,6 @@ type Pinger struct {
 	conn backend.Conn
 	dest net.Addr
 	opts *Options
-	id   int
 	done chan any
 
 	mu sync.Mutex
@@ -195,11 +183,6 @@ type Pinger struct {
 // New creates a new pinger and starts pinging. It will continue until Close()
 // is called.
 func New(newConn backend.NewConn, dest net.Addr, opts *Options) (*Pinger, error) {
-	id := opts.id()
-	if id == 0 {
-		id = util.GenID()
-	}
-
 	conn, err := newConn()
 	if err != nil {
 		return nil, err
@@ -209,7 +192,6 @@ func New(newConn backend.NewConn, dest net.Addr, opts *Options) (*Pinger, error)
 		conn:    conn,
 		dest:    dest,
 		opts:    opts,
-		id:      id,
 		done:    make(chan any),
 		lastSeq: -1,
 		history: make([]PingResult, opts.history()),
@@ -354,7 +336,7 @@ func (p *Pinger) sendPing(seq int) (int, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	pkt := &backend.Packet{ID: p.id, Seq: seq}
+	pkt := &backend.Packet{Seq: seq}
 	if err := p.conn.WriteTo(pkt, p.dest); err != nil {
 		return -1, fmt.Errorf("error pinging %v: %v", p.dest, err)
 	}
@@ -381,10 +363,6 @@ func (p *Pinger) receiveLoop(received chan<- readResult) {
 }
 
 func (p *Pinger) handleReply(pkt *backend.Packet, peer net.Addr) {
-	if pkt.ID != p.id {
-		return
-	}
-
 	p.mu.Lock()
 	defer p.mu.Unlock()
 

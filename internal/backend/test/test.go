@@ -58,11 +58,11 @@ type PingExchangeOpts struct {
 
 // NewPingExchange creates a PingExchangeOpts struct with reasonable defaults
 // for a successful request/reply.
-func NewPingExchange(id, seq int) *PingExchangeOpts {
+func NewPingExchange(seq int) *PingExchangeOpts {
 	return &PingExchangeOpts{
-		SendPkt: backend.Packet{ID: id, Seq: seq},
+		SendPkt: backend.Packet{Seq: seq},
 		Dest:    LoopbackV4,
-		RecvPkt: backend.Packet{Type: backend.PacketReply, ID: id, Seq: seq},
+		RecvPkt: backend.Packet{Type: backend.PacketReply, Seq: seq},
 		Peer:    LoopbackV4,
 	}
 }

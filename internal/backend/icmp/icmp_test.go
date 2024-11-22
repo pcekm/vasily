@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/util"
 )
 
 var (
@@ -51,10 +50,8 @@ func TestPingConnection(t *testing.T) {
 				t.Errorf("Error setting deadline: %v", err)
 			}
 
-			id := util.GenID()
 			for seq := 0; seq < 10; seq++ {
 				pkt := &backend.Packet{
-					ID:      id,
 					Seq:     seq,
 					Payload: []byte("the payload"),
 				}

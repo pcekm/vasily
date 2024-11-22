@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/util"
 )
 
 const (
@@ -41,7 +40,6 @@ func TraceRoute(newConn backend.NewConn, dest net.Addr, res chan<- Step) error {
 		return fmt.Errorf("error creating connection: %v", err)
 	}
 	pkt := &backend.Packet{
-		ID:  util.GenID(),
 		Seq: 0,
 	}
 	for i := 1; i < maxTTL; i++ {
@@ -50,7 +48,7 @@ func TraceRoute(newConn backend.NewConn, dest net.Addr, res chan<- Step) error {
 				return fmt.Errorf("error sending ping: %v", err)
 			}
 			pkt.Seq++
-			recvPkt, peer, err := readIDSeq(conn, pkt.ID, pkt.Seq-1)
+			recvPkt, peer, err := readSeq(conn, pkt.Seq-1)
 			if err != nil {
 				if strings.HasSuffix(err.Error(), "timeout") {
 					continue
@@ -70,11 +68,11 @@ func TraceRoute(newConn backend.NewConn, dest net.Addr, res chan<- Step) error {
 	return fmt.Errorf("maximum TTL of %d reached", maxTTL)
 }
 
-func readIDSeq(conn backend.Conn, id, seq int) (*backend.Packet, net.Addr, error) {
+func readSeq(conn backend.Conn, seq int) (*backend.Packet, net.Addr, error) {
 	conn.SetReadDeadline(time.Now().Add(timeout))
 	for {
 		pkt, peer, err := conn.ReadFrom()
-		if pkt != nil && (pkt.ID != id || pkt.Seq != seq || pkt.Type == backend.PacketRequest) {
+		if pkt != nil && (pkt.Seq != seq || pkt.Type == backend.PacketRequest) {
 			continue
 		}
 		return pkt, peer, err

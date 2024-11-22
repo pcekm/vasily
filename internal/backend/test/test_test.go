@@ -13,9 +13,9 @@ func TestMockPingExchange(t *testing.T) {
 	conn := NewMockConn(ctrl)
 
 	payload := []byte("the payload")
-	conn.MockPingExchange(NewPingExchange(1, 2).SetPayload(payload))
+	conn.MockPingExchange(NewPingExchange(2).SetPayload(payload))
 
-	sentPkt := &backend.Packet{ID: 1, Seq: 2, Payload: payload}
+	sentPkt := &backend.Packet{Seq: 2, Payload: payload}
 	if err := conn.WriteTo(sentPkt, LoopbackV4); err != nil {
 		t.Errorf("WriteTo error: %v", err)
 	}
@@ -26,7 +26,7 @@ func TestMockPingExchange(t *testing.T) {
 	if diff := cmp.Diff(LoopbackV4, peer); diff != "" {
 		t.Errorf("Wrong peer (-want, +got):\n%v", diff)
 	}
-	wantPkt := &backend.Packet{Type: backend.PacketReply, ID: 1, Seq: 2, Payload: payload}
+	wantPkt := &backend.Packet{Type: backend.PacketReply, Seq: 2, Payload: payload}
 	if diff := cmp.Diff(wantPkt, gotPkt); diff != "" {
 		t.Errorf("Wrong packet received (-want, +got):\n%v", diff)
 	}
@@ -39,7 +39,7 @@ func BenchmarkPingExchange_Overall(b *testing.B) {
 	ctrl := gomock.NewController(b)
 	conn := NewMockConn(ctrl)
 	for i := range b.N {
-		conn.MockPingExchange(NewPingExchange(0, i))
+		conn.MockPingExchange(NewPingExchange(i))
 	}
 
 	b.StartTimer()
@@ -61,7 +61,7 @@ func BenchmarkPingExchange_WriteTo(b *testing.B) {
 	ctrl := gomock.NewController(b)
 	conn := NewMockConn(ctrl)
 	for i := range b.N {
-		conn.MockPingExchange(NewPingExchange(0, i))
+		conn.MockPingExchange(NewPingExchange(i))
 	}
 
 	for i := range b.N {
@@ -84,7 +84,7 @@ func BenchmarkPingExchange_ReadFrom(b *testing.B) {
 	ctrl := gomock.NewController(b)
 	conn := NewMockConn(ctrl)
 	for i := range b.N {
-		conn.MockPingExchange(NewPingExchange(0, i))
+		conn.MockPingExchange(NewPingExchange(i))
 	}
 
 	for i := range b.N {

@@ -47,9 +47,6 @@ type Packet struct {
 	// Type is the type of packet sent or received.
 	Type PacketType
 
-	// ID is a number identifying this particular ping session.
-	ID int
-
 	// Seq is a number identifying a particular request/response pair in a ping
 	// session.
 	Seq int

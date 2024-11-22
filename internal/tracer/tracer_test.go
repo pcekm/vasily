@@ -16,8 +16,8 @@ func hopAddr(hop int) *net.UDPAddr {
 	return &net.UDPAddr{IP: net.IPv4(192, 0, 2, byte(hop))}
 }
 
-func traceExchange(id, seq, ttl int, dest net.Addr) *test.PingExchangeOpts {
-	opts := test.NewPingExchange(id, seq)
+func traceExchange(seq, ttl int, dest net.Addr) *test.PingExchangeOpts {
+	opts := test.NewPingExchange(seq)
 	opts.Dest = dest
 	opts.TTL = ttl
 	opts.RecvPkt.Type = backend.PacketTimeExceeded
@@ -64,11 +64,7 @@ loop:
 }
 
 func TestTraceRoute(t *testing.T) {
-	const (
-		id      = 12345
-		pathLen = 10
-	)
-	defer test.InjectID(id)()
+	const pathLen = 10
 
 	dest := hopAddr(pathLen)
 
@@ -80,7 +76,7 @@ func TestTraceRoute(t *testing.T) {
 		if i == pathLen-1 {
 			tp = backend.PacketReply
 		}
-		opts := traceExchange(id, i, i+1, dest)
+		opts := traceExchange(i, i+1, dest)
 		opts.RecvPkt.Type = tp
 		conn.MockPingExchange(opts)
 	}
@@ -105,19 +101,15 @@ func TestTraceRoute(t *testing.T) {
 }
 
 func TestTraceRouteUnreachablePacket(t *testing.T) {
-	const (
-		id      = 12345
-		pathLen = 3
-	)
-	defer test.InjectID(id)()
+	const pathLen = 3
 
 	dest := hopAddr(pathLen)
 
 	ctrl := gomock.NewController(t)
 	conn := test.NewMockConn(ctrl)
-	opts := traceExchange(id, 0, 1, dest)
+	opts := traceExchange(0, 1, dest)
 	conn.MockPingExchange(opts)
-	opts = traceExchange(id, 1, 2, dest)
+	opts = traceExchange(1, 2, dest)
 	opts.RecvPkt.Type = backend.PacketDestinationUnreachable
 	conn.MockPingExchange(opts)
 
@@ -132,31 +124,27 @@ func TestTraceRouteUnreachablePacket(t *testing.T) {
 }
 
 func TestTraceRouteDroppedPacket(t *testing.T) {
-	const (
-		id      = 12345
-		pathLen = 3
-	)
-	defer test.InjectID(id)()
+	const pathLen = 3
 
 	dest := hopAddr(pathLen)
 
 	ctrl := gomock.NewController(t)
 	conn := test.NewMockConn(ctrl)
-	opts := traceExchange(id, 0, 1, dest)
+	opts := traceExchange(0, 1, dest)
 	conn.MockPingExchange(opts)
 
 	// Three retries for dropped packet:
-	opts = traceExchange(id, 1, 2, dest)
+	opts = traceExchange(1, 2, dest)
 	opts.RecvErr = test.ErrTimeout
 	conn.MockPingExchange(opts)
-	opts = traceExchange(id, 2, 2, dest)
+	opts = traceExchange(2, 2, dest)
 	opts.RecvErr = test.ErrTimeout
 	conn.MockPingExchange(opts)
-	opts = traceExchange(id, 3, 2, dest)
+	opts = traceExchange(3, 2, dest)
 	opts.RecvErr = test.ErrTimeout
 	conn.MockPingExchange(opts)
 
-	opts = traceExchange(id, 4, 3, dest)
+	opts = traceExchange(4, 3, dest)
 	opts.RecvPkt.Type = backend.PacketReply
 	conn.MockPingExchange(opts)
 
