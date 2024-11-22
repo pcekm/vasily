@@ -7,8 +7,9 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/pcekm/graphping/internal/ping/connection"
-	"github.com/pcekm/graphping/internal/ping/test"
+	"github.com/pcekm/graphping/internal/backend"
+	"github.com/pcekm/graphping/internal/backend/test"
+	"go.uber.org/mock/gomock"
 )
 
 func hopAddr(hop int) *net.UDPAddr {
@@ -19,34 +20,47 @@ func traceExchange(id, seq, ttl int, dest net.Addr) *test.PingExchangeOpts {
 	opts := test.NewPingExchange(id, seq)
 	opts.Dest = dest
 	opts.TTL = ttl
-	opts.RecvPkt.Type = connection.PacketTimeExceeded
+	opts.RecvPkt.Type = backend.PacketTimeExceeded
 	opts.Peer = hopAddr(ttl)
+	opts.ReadDeadline = time.Now().Add(time.Second)
 	return opts
 }
 
-// Runs a trace and collects the validates the reults.
+// Runs a trace and collects the validates the results.
 func checkTrace(t *testing.T, conn *test.MockConn, dest net.Addr, want []Step) error {
 	ch := make(chan Step)
-	done := make(chan any)
-	var result []Step
+	errs := make(chan error)
 	go func() {
-		for r := range ch {
+		if err := TraceRoute(func() (backend.Conn, error) { return conn, nil }, dest, ch); err != nil {
+			errs <- err
+		}
+		close(errs)
+	}()
+	var result []Step
+	deadline := time.After(time.Second)
+loop:
+	for {
+		select {
+		case r, ok := <-ch:
+			if !ok {
+				break loop
+			}
+			if r.Pos == 0 {
+				t.Errorf("Invalid Step received: %+v", r)
+				break
+			}
 			i := r.Pos - 1
 			result = slices.Grow(result, i+1)[:i+1]
 			result[r.Pos-1] = r
+		case <-deadline:
+			t.Error("Timed out waiting for result channel close.")
+			break loop
 		}
-		close(done)
-	}()
-	err := TraceRoute(conn, dest, ch)
-	select {
-	case <-time.After(time.Second):
-		t.Error("Timed out waiting for result channel close.")
-	case <-done:
 	}
 	if diff := cmp.Diff(want, result); diff != "" {
 		t.Errorf("Incorrect path (-want, +got):\n%v", diff)
 	}
-	return err
+	return <-errs
 }
 
 func TestTraceRoute(t *testing.T) {
@@ -58,12 +72,13 @@ func TestTraceRoute(t *testing.T) {
 
 	dest := hopAddr(pathLen)
 
-	conn := &test.MockConn{}
+	ctrl := gomock.NewController(t)
+	conn := test.NewMockConn(ctrl)
 
 	for i := 0; i < pathLen; i++ {
-		tp := connection.PacketTimeExceeded
+		tp := backend.PacketTimeExceeded
 		if i == pathLen-1 {
-			tp = connection.PacketReply
+			tp = backend.PacketReply
 		}
 		opts := traceExchange(id, i, i+1, dest)
 		opts.RecvPkt.Type = tp
@@ -86,7 +101,7 @@ func TestTraceRoute(t *testing.T) {
 		t.Errorf("TraceRoute error: %v", err)
 	}
 
-	conn.AssertExpectations(t)
+	ctrl.Finish()
 }
 
 func TestTraceRouteUnreachablePacket(t *testing.T) {
@@ -98,21 +113,22 @@ func TestTraceRouteUnreachablePacket(t *testing.T) {
 
 	dest := hopAddr(pathLen)
 
-	conn := &test.MockConn{}
+	ctrl := gomock.NewController(t)
+	conn := test.NewMockConn(ctrl)
 	opts := traceExchange(id, 0, 1, dest)
 	conn.MockPingExchange(opts)
 	opts = traceExchange(id, 1, 2, dest)
-	opts.RecvPkt.Type = connection.PacketDestinationUnreachable
+	opts.RecvPkt.Type = backend.PacketDestinationUnreachable
 	conn.MockPingExchange(opts)
 
 	want := []Step{
 		{Pos: 1, Host: hopAddr(1)},
 	}
 	if err := checkTrace(t, conn, dest, want); err == nil {
-		t.Error("No error from after dest unreachable.")
+		t.Error("No error after destination unreachable.")
 	}
 
-	conn.AssertExpectations(t)
+	ctrl.Finish()
 }
 
 func TestTraceRouteDroppedPacket(t *testing.T) {
@@ -124,23 +140,24 @@ func TestTraceRouteDroppedPacket(t *testing.T) {
 
 	dest := hopAddr(pathLen)
 
-	conn := &test.MockConn{}
+	ctrl := gomock.NewController(t)
+	conn := test.NewMockConn(ctrl)
 	opts := traceExchange(id, 0, 1, dest)
 	conn.MockPingExchange(opts)
 
 	// Three retries for dropped packet:
 	opts = traceExchange(id, 1, 2, dest)
-	opts.NoReply = true
+	opts.RecvErr = test.ErrTimeout
 	conn.MockPingExchange(opts)
 	opts = traceExchange(id, 2, 2, dest)
-	opts.NoReply = true
+	opts.RecvErr = test.ErrTimeout
 	conn.MockPingExchange(opts)
 	opts = traceExchange(id, 3, 2, dest)
-	opts.NoReply = true
+	opts.RecvErr = test.ErrTimeout
 	conn.MockPingExchange(opts)
 
 	opts = traceExchange(id, 4, 3, dest)
-	opts.RecvPkt.Type = connection.PacketReply
+	opts.RecvPkt.Type = backend.PacketReply
 	conn.MockPingExchange(opts)
 
 	want := []Step{
@@ -152,5 +169,5 @@ func TestTraceRouteDroppedPacket(t *testing.T) {
 		t.Errorf("TraceRoute error: %v", err)
 	}
 
-	conn.AssertExpectations(t)
+	ctrl.Finish()
 }

@@ -8,8 +8,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/lookup"
-	"github.com/pcekm/graphping/internal/ping/connection"
 	"github.com/pcekm/graphping/internal/ping/pinger"
 	"github.com/pcekm/graphping/internal/ping/tracer"
 	"github.com/pcekm/graphping/internal/tui/table"
@@ -45,15 +45,15 @@ type traceStepMsg struct {
 // Model is the main text UI model.
 type Model struct {
 	table      *table.Model
-	connV4     *connection.PingConn
-	connV6     *connection.PingConn
+	connV4     backend.NewConn
+	connV6     backend.NewConn
 	hosts      []string
 	rowUpdates chan table.RowKey
 	opts       *Options
 }
 
 // New creates a new model.
-func New(connV4, connV6 *connection.PingConn, hosts []string, opts *Options) (*Model, error) {
+func New(connV4, connV6 backend.NewConn, hosts []string, opts *Options) (*Model, error) {
 	m := &Model{
 		table:      table.New(),
 		connV4:     connV4,
@@ -112,7 +112,7 @@ func (m *Model) readNextRow() tea.Cmd {
 	}
 }
 
-func (m *Model) connForAddr(addr net.Addr) *connection.PingConn {
+func (m *Model) connFuncForAddr(addr net.Addr) backend.NewConn {
 	udpAddr, ok := addr.(*net.UDPAddr)
 	if !ok {
 		// This should never happen.
@@ -131,7 +131,10 @@ func (m *Model) startPingerCmd(key table.RowKey, target net.Addr) tea.Cmd {
 		opts.Callback = func(int, pinger.PingResult) {
 			m.rowUpdates <- key
 		}
-		ping := pinger.Ping(m.connForAddr(target), target, &opts)
+		ping, err := pinger.Ping(m.connFuncForAddr(target), target, &opts)
+		if err != nil {
+			return err
+		}
 		go ping.Run()
 		return table.AddRow{
 			Row: table.Row{
@@ -147,7 +150,7 @@ func (m *Model) startTraceCmd(addr net.Addr) tea.Cmd {
 	ch := make(chan tracer.Step)
 	return tea.Batch(
 		func() tea.Msg {
-			err := tracer.TraceRoute(m.connForAddr(addr), addr, ch)
+			err := tracer.TraceRoute(m.connFuncForAddr(addr), addr, ch)
 			if err != nil {
 				return fmt.Errorf("traceroute: %v: %v", addr, err)
 			}

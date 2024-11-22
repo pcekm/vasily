@@ -8,7 +8,7 @@ import (
 
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/ping/util"
-	"github.com/stretchr/testify/mock"
+	"go.uber.org/mock/gomock"
 )
 
 var (
@@ -26,21 +26,6 @@ var (
 
 // PingExchangeOpts holds various parameters for a send/receive exchange of
 // pings.
-// TODO: There's some flakiness inherent in this and I'm not quite sure how to
-// deal with it. In some cases, a ReadFrom can return before the associated
-// WriteTo has completed. While I'm taking steps to prevent this, there's
-// ultimately no way to completely eliminate it without returning a channel from
-// ReadFrom. The problem with that approach is that it provides a better
-// guarantee than an actual network connection, where it's totally possible for
-// a WriteTo goroutine to get scheduled late, while a reply comes a bit early.
-// So I'm either going to have to live with this flakiness, or figure out how to
-// make the code work when effect precedes cause.
-//
-// One issue I noticed through benchmarking was that testify/mock is _very_
-// slow when dealing with args. For example, calls to ReadFrom (which takes no
-// args) are orders of magnitude faster than WriteTo (which takes three).
-// WriteTo takes over 1ms complete. Which is a crazy amount of time, and really
-// adds up when it gets called repeatedly.
 type PingExchangeOpts struct {
 	// SendPkt is the packet expected to be sent in the ping.
 	SendPkt backend.Packet
@@ -60,9 +45,6 @@ type PingExchangeOpts struct {
 
 	// Peer is address the response will come from.
 	Peer net.Addr
-
-	// Latency is the time to wait before returning a reply.
-	Latency time.Duration
 
 	// ReadDeadline is the receive deadline set.
 	ReadDeadline time.Time
@@ -97,12 +79,6 @@ func (p *PingExchangeOpts) SetPeer(peer net.Addr) *PingExchangeOpts {
 	return p
 }
 
-// SetLatency sets the Latency field.
-func (p *PingExchangeOpts) SetLatency(d time.Duration) *PingExchangeOpts {
-	p.Latency = d
-	return p
-}
-
 // SetNoReply sets the NoReply field.
 func (p *PingExchangeOpts) SetNoReply(nr bool) *PingExchangeOpts {
 	p.NoReply = nr
@@ -122,87 +98,51 @@ func (p *PingExchangeOpts) SetPayload(b []byte) *PingExchangeOpts {
 	return p
 }
 
-// MockConn is a mock PingConn built using testify/mock.
-type MockConn struct {
-	mock.Mock
-}
-
-// WriteTo sends a ping.
-func (c *MockConn) WriteTo(pkt *backend.Packet, addr net.Addr, opts ...backend.WriteOption) error {
-	var args mock.Arguments
-	args = c.Called(pkt, addr, opts)
-	return args.Error(0)
-}
-
-// ReadFrom receives a ping.
-func (c *MockConn) ReadFrom() (pkt *backend.Packet, peer net.Addr, err error) {
-	args := c.Called()
-	pkt, _ = args.Get(0).(*backend.Packet)
-	peer, _ = args.Get(1).(net.Addr)
-	return pkt, peer, args.Error(2)
-}
-
-// SetDeadline sets the read and write deadlines.
-func (c *MockConn) SetDeadline(t time.Time) error {
-	args := c.Called(t)
-	return args.Error(0)
-}
-
-// SetReadDeadline sets the read deadline.
-func (c *MockConn) SetReadDeadline(t time.Time) error {
-	args := c.Called(t)
-	return args.Error(0)
-}
-
-// SetWriteDeadline sets the write deadline.
-func (c *MockConn) SetWriteDeadline(t time.Time) error {
-	args := c.Called(t)
-	return args.Error(0)
-}
-
-// Close closes the connection.
-func (c *MockConn) Close() error {
-	args := c.Called()
-	return args.Error(0)
+type readWait struct {
+	T    time.Time
+	Opts PingExchangeOpts
 }
 
 // MockPingExchange sets up a single mock ping request and reply.
 func (c *MockConn) MockPingExchange(opt *PingExchangeOpts) {
 	pingSent := make(chan time.Time)
-	sendFunc := func(_ mock.Arguments) {
+	sendFunc := func(pkt *backend.Packet, _ net.Addr, _ ...backend.WriteOption) {
 		close(pingSent)
 	}
 	sendPkt := opt.SendPkt // Deep-ish copy (all but payload).
 	if opt.TTL == 0 {
-		c.On("WriteTo", &sendPkt, opt.Dest, []backend.WriteOption(nil)).
-			Once().
-			Run(sendFunc).
+		c.EXPECT().
+			WriteTo(gomock.Eq(&sendPkt), gomock.Eq(opt.Dest)).
+			Times(1).
+			Do(sendFunc).
 			Return(opt.SendErr)
 	} else {
-		c.On("WriteTo", &sendPkt, opt.Dest, []backend.WriteOption{backend.TTLOption{TTL: opt.TTL}}).
-			Once().
-			Run(sendFunc).
+		c.EXPECT().
+			WriteTo(&sendPkt, opt.Dest, backend.TTLOption{TTL: opt.TTL}).
+			Times(1).
+			Do(sendFunc).
 			Return(opt.SendErr)
 	}
 
 	if !opt.NoReply {
 		if !opt.ReadDeadline.IsZero() {
-			c.On("SetReadDeadline", mock.MatchedBy(func(got time.Time) bool {
-				delta := got.Unix() - opt.ReadDeadline.Unix()
-				if delta < 0 {
-					delta = -delta
-				}
-				return delta < 1
-			})).
-				Once().
+			c.EXPECT().
+				SetReadDeadline(gomock.Cond(func(got time.Time) bool {
+					delta := got.Unix() - opt.ReadDeadline.Unix()
+					if delta < 0 {
+						delta = -delta
+					}
+					return delta < 1
+				})).
+				Times(1).
 				Return(nil)
 		}
 		recvPkt := opt.RecvPkt
-		c.On("ReadFrom").
-			Once().
-			Run(func(_ mock.Arguments) {
+		c.EXPECT().
+			ReadFrom().
+			Times(1).
+			Do(func() {
 				<-pingSent
-				time.Sleep(opt.Latency)
 			}).
 			Return(&recvPkt, opt.Peer, opt.RecvErr)
 	}
@@ -212,13 +152,17 @@ func (c *MockConn) MockPingExchange(opt *PingExchangeOpts) {
 // will return an error.
 func (c *MockConn) MockClose() {
 	closed := make(chan time.Time)
-	c.On("Close").
-		Maybe().
-		Run(func(_ mock.Arguments) { close(closed) }).
+	c.EXPECT().
+		Close().
+		AnyTimes().
+		Do(func() { close(closed) }).
 		Return(nil)
-	c.On("ReadFrom").
-		Maybe().
-		WaitUntil(closed).
+	c.EXPECT().
+		ReadFrom().
+		AnyTimes().
+		Do(func() {
+			<-closed
+		}).
 		Return(nil, nil, errors.New("mock closed"))
 }
 

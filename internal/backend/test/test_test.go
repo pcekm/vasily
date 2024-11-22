@@ -5,10 +5,12 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pcekm/graphping/internal/backend"
+	"go.uber.org/mock/gomock"
 )
 
 func TestMockPingExchange(t *testing.T) {
-	conn := &MockConn{}
+	ctrl := gomock.NewController(t)
+	conn := NewMockConn(ctrl)
 
 	payload := []byte("the payload")
 	conn.MockPingExchange(NewPingExchange(1, 2).SetPayload(payload))
@@ -29,12 +31,13 @@ func TestMockPingExchange(t *testing.T) {
 		t.Errorf("Wrong packet received (-want, +got):\n%v", diff)
 	}
 
-	conn.AssertExpectations(t)
+	ctrl.Finish()
 }
 
 func BenchmarkPingExchange_Overall(b *testing.B) {
 	b.StopTimer()
-	conn := &MockConn{}
+	ctrl := gomock.NewController(b)
+	conn := NewMockConn(ctrl)
 	for i := range b.N {
 		conn.MockPingExchange(NewPingExchange(0, i))
 	}
@@ -50,11 +53,13 @@ func BenchmarkPingExchange_Overall(b *testing.B) {
 			b.Errorf("ReadFrom error: %v", err)
 		}
 	}
+	ctrl.Finish()
 }
 
 func BenchmarkPingExchange_WriteTo(b *testing.B) {
 	b.StopTimer()
-	conn := &MockConn{}
+	ctrl := gomock.NewController(b)
+	conn := NewMockConn(ctrl)
 	for i := range b.N {
 		conn.MockPingExchange(NewPingExchange(0, i))
 	}
@@ -71,11 +76,13 @@ func BenchmarkPingExchange_WriteTo(b *testing.B) {
 			b.Errorf("ReadFrom error: %v", err)
 		}
 	}
+	ctrl.Finish()
 }
 
 func BenchmarkPingExchange_ReadFrom(b *testing.B) {
 	b.StopTimer()
-	conn := &MockConn{}
+	ctrl := gomock.NewController(b)
+	conn := NewMockConn(ctrl)
 	for i := range b.N {
 		conn.MockPingExchange(NewPingExchange(0, i))
 	}
@@ -92,4 +99,5 @@ func BenchmarkPingExchange_ReadFrom(b *testing.B) {
 			b.Errorf("ReadFrom error: %v", err)
 		}
 	}
+	ctrl.Finish()
 }

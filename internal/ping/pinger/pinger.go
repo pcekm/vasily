@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pcekm/graphping/internal/ping/connection"
+	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/ping/util"
 )
 
@@ -90,7 +90,7 @@ func (o *Options) id() int {
 }
 
 // ResultType is the type of reply received. This is a high-level view. More
-// specifics will require delving into the resturned packet.
+// specifics will require delving into the returned packet.
 type ResultType int
 
 // Values for ReplyType.
@@ -98,13 +98,13 @@ const (
 	// Waiting means we're still waiting for a reply.
 	Waiting ResultType = iota
 
-	// Successs a normal ping response.
+	// Success is a normal ping response.
 	Success
 
-	// Dropped means no reply was received in the alotted time.
+	// Dropped means no reply was received in the allotted time.
 	Dropped
 
-	// Duplicate means a dupilcate reply was received.
+	// Duplicate means a duplicate reply was received.
 	Duplicate
 
 	// TTLExceeded means the packet exceeded its maximum hop count.
@@ -165,13 +165,9 @@ func (s Stats) PacketLoss() float64 {
 	return float64(s.Failures) / float64(s.N)
 }
 
-// Connection is the interface implemented by PingConnection.
-type Connection interface {
-	// WriteTo sends a ping packet.
-	WriteTo(*connection.Packet, net.Addr) error
-
-	// ReadFrom receives a ping packet.
-	AddCallback(connection.Callback) connection.Remover
+type readResult struct {
+	pkt  *backend.Packet
+	peer net.Addr
 }
 
 type timeoutDatum struct {
@@ -181,7 +177,7 @@ type timeoutDatum struct {
 
 // Pinger pings a specific host and reports the results.
 type Pinger struct {
-	conn Connection
+	conn backend.Conn
 	dest net.Addr
 	opts *Options
 	id   int
@@ -189,7 +185,7 @@ type Pinger struct {
 
 	mu sync.Mutex
 	// This is a ring buffer of the last opts.History ping results.
-	// An the index for a given sequence number is given by:
+	// The index for a given sequence number is given by:
 	//    i = seq % len(history)
 	history []PingResult
 	lastSeq int
@@ -198,10 +194,15 @@ type Pinger struct {
 
 // Ping creates a new pinger and starts pinging. It will continue until Close()
 // is called.
-func Ping(conn Connection, dest net.Addr, opts *Options) *Pinger {
+func Ping(newConn backend.NewConn, dest net.Addr, opts *Options) (*Pinger, error) {
 	id := opts.id()
 	if id == 0 {
 		id = util.GenID()
+	}
+
+	conn, err := newConn()
+	if err != nil {
+		return nil, err
 	}
 
 	return &Pinger{
@@ -212,13 +213,13 @@ func Ping(conn Connection, dest net.Addr, opts *Options) *Pinger {
 		done:    make(chan any),
 		lastSeq: -1,
 		history: make([]PingResult, opts.history()),
-	}
+	}, nil
 }
 
 // Close stops the Pinger and performs an orderly shutdown.
 func (p *Pinger) Close() error {
 	close(p.done)
-	return nil
+	return p.conn.Close()
 }
 
 // Latest returns the most recent ping result or the zero result if no results
@@ -273,90 +274,113 @@ func (p *Pinger) runCallback(seq int, result PingResult) {
 	go p.opts.callback()(seq, result)
 }
 
-func afterNextTimeout(timeouts *list.List) <-chan time.Time {
+func (p *Pinger) afterNextTimeout(timeouts *list.List) <-chan time.Time {
 	fr := timeouts.Front()
 	if fr == nil {
 		return nil
 	}
-	return time.After(time.Until(fr.Value.(timeoutDatum).t))
+	return time.After(fr.Value.(timeoutDatum).t.Sub(time.Now()))
 }
 
 // Runs the pinger. Returns when complete, or Close().
 func (p *Pinger) Run() {
-	defer p.conn.AddCallback(p.handleReply)()
-	ticker := time.NewTicker(p.opts.interval())
-	defer ticker.Stop()
-	pingsRemaining := p.opts.nPings()
-	pkt := connection.Packet{ID: p.id}
+	sentSeqs := make(chan int)
+	go p.sendLoop(sentSeqs)
+	receivedPkts := make(chan readResult)
+	go p.receiveLoop(receivedPkts)
+
 	timeouts := list.New()
+	shutdown := false
+
 	for {
 		select {
-		case <-ticker.C:
-			if pingsRemaining <= 0 {
-				if timeouts.Len() == 0 {
-					return
-				}
-				// Still some timeouts to process. But don't send any more pings.
-				continue
+		case seq, ok := <-sentSeqs:
+			if !ok {
+				log.Printf("Main loop: shutting down")
+				shutdown = true
+				sentSeqs = nil
+				break
 			}
-			pingsRemaining--
-			if err := p.sendPing(&pkt); err != nil {
-				log.Printf("Ping error; exiting send loop: %v", err)
-				return
-			}
-			timeouts.PushBack(timeoutDatum{seq: p.lastSeq, t: time.Now().Add(p.opts.timeout())})
-		case <-afterNextTimeout(timeouts):
+			timeouts.PushBack(timeoutDatum{seq: seq, t: time.Now().Add(p.opts.timeout())})
+		case res := <-receivedPkts:
+			p.handleReply(res.pkt, res.peer)
+		case <-p.afterNextTimeout(timeouts):
 			fr := timeouts.Front()
 			timeouts.Remove(fr)
 			td := fr.Value.(timeoutDatum)
 			p.maybeRecordTimeout(td.seq)
-			if timeouts.Len() == 0 {
-				if pingsRemaining <= 0 {
-					return
-				}
+			if shutdown && timeouts.Len() == 0 {
+				log.Printf("Main loop: finished shutdown")
+				return
 			}
 		case <-p.done:
-			pingsRemaining = 0
+			log.Printf("Main loop: aborting")
+			return
 		}
 	}
 }
 
-func (p *Pinger) sendPing(pkt *connection.Packet) error {
+// Sends pings and emits the sent sequence numbers over the channel.
+func (p *Pinger) sendLoop(sentSeqs chan<- int) {
+	defer close(sentSeqs)
+	// Note: This deliberately doesn't use p.clock because trying to manage
+	// advancing the clock and getting this to fire correctly is a nightmare.
+	ticker := time.NewTicker(p.opts.interval())
+	defer ticker.Stop()
+	pingsRemaining := p.opts.nPings()
+	nextSeq := 0
+	for {
+		select {
+		case <-ticker.C:
+			if pingsRemaining <= 0 {
+				return
+			}
+			pingsRemaining--
+			seq, err := p.sendPing(nextSeq)
+			if err != nil {
+				log.Printf("Ping error; exiting send loop: %v", err)
+				return
+			}
+			sentSeqs <- seq
+			nextSeq = (nextSeq + 1) & sequenceNoMask
+		case <-p.done:
+			return
+		}
+	}
+}
+
+// Sends a ping; returns the sequence number of the sent ping.
+func (p *Pinger) sendPing(seq int) (int, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	pkt := &backend.Packet{ID: p.id, Seq: seq}
 	if err := p.conn.WriteTo(pkt, p.dest); err != nil {
-		return fmt.Errorf("error pinging %v: %v", p.dest, err)
+		return -1, fmt.Errorf("error pinging %v: %v", p.dest, err)
 	}
-	i := pkt.Seq % len(p.history)
+	i := seq % len(p.history)
 	p.history[i] = PingResult{
 		Type: Waiting,
 		Time: time.Now(),
 	}
-	p.lastSeq = pkt.Seq
-	pkt.Seq = (pkt.Seq + 1) & sequenceNoMask
-	return nil
+	p.lastSeq = seq
+	return p.lastSeq, nil
 }
 
-// Records a timeout if necessary.
-func (p *Pinger) maybeRecordTimeout(seq int) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.lastSeq-seq >= len(p.history) {
-		log.Printf("Timeout for seq %d too late to record in history", seq)
-		return
+// Receives pings and emits the results over the channel. Stops when conn is
+// closed.
+func (p *Pinger) receiveLoop(received chan<- readResult) {
+	for {
+		pkt, peer, err := p.conn.ReadFrom()
+		if err != nil {
+			log.Printf("ReadFrom error: %v", err)
+			return
+		}
+		received <- readResult{pkt: pkt, peer: peer}
 	}
-	i := seq % len(p.history)
-	if p.history[i].Type != Waiting {
-		return
-	}
-	p.history[i].Type = Dropped
-	p.stats.N++
-	p.stats.Failures++
-	p.runCallback(seq, p.history[i])
 }
 
-func (p *Pinger) handleReply(pkt *connection.Packet, peer net.Addr) {
+func (p *Pinger) handleReply(pkt *backend.Packet, peer net.Addr) {
 	if pkt.ID != p.id {
 		return
 	}
@@ -381,14 +405,14 @@ func (p *Pinger) handleReply(pkt *connection.Packet, peer net.Addr) {
 
 	p.history[i].Latency = time.Since(p.history[i].Time)
 	switch pkt.Type {
-	case connection.PacketRequest:
+	case backend.PacketRequest:
 		// This case should be filtered out by PingConnection.
 		log.Panicf("Unexpected packet request received: %v", pkt)
-	case connection.PacketReply:
+	case backend.PacketReply:
 		p.history[i].Type = Success
-	case connection.PacketTimeExceeded:
+	case backend.PacketTimeExceeded:
 		p.history[i].Type = TTLExceeded
-	case connection.PacketDestinationUnreachable:
+	case backend.PacketDestinationUnreachable:
 		p.history[i].Type = Unreachable
 	}
 
@@ -400,4 +424,22 @@ func (p *Pinger) handleReply(pkt *connection.Packet, peer net.Addr) {
 	p.stats.N++
 
 	p.runCallback(pkt.Seq, p.history[i])
+}
+
+// Records a timeout if necessary.
+func (p *Pinger) maybeRecordTimeout(seq int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.lastSeq-seq >= len(p.history) {
+		log.Printf("Timeout for seq %d too late to record in history", seq)
+		return
+	}
+	i := seq % len(p.history)
+	if p.history[i].Type != Waiting {
+		return
+	}
+	p.history[i].Type = Dropped
+	p.stats.N++
+	p.stats.Failures++
+	p.runCallback(seq, p.history[i])
 }

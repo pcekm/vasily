@@ -1,5 +1,5 @@
 // Command graphping is a ping utility that displays pings to multiple hosts in
-// a concise bargraph format. It can also ping the entire path to a remote host
+// a concise bar chart format. It can also ping the entire path to a remote host
 // with the --path flag.
 package main
 
@@ -10,8 +10,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/pflag"
 
+	"github.com/pcekm/graphping/internal/backend"
+	"github.com/pcekm/graphping/internal/backend/icmp"
 	"github.com/pcekm/graphping/internal/lookup"
-	"github.com/pcekm/graphping/internal/ping/connection"
 	"github.com/pcekm/graphping/internal/tui"
 )
 
@@ -35,8 +36,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	connV4, connV6 := newPingConns()
-
 	if *logfile != "" {
 		logf, err := tea.LogToFile(*logfile, "")
 		if err != nil {
@@ -48,7 +47,7 @@ func main() {
 	opts := &tui.Options{
 		Trace: *pingPath,
 	}
-	tbl, err := tui.New(connV4, connV6, pflag.Args(), opts)
+	tbl, err := tui.New(newV4Conn, newV6Conn, pflag.Args(), opts)
 	if err != nil {
 		log.Fatalf("Error initializing UI: %v", err)
 	}
@@ -57,15 +56,11 @@ func main() {
 	prog.Run()
 }
 
-func newPingConns() (*connection.PingConn, *connection.PingConn) {
-	// TODO: privileged ping support.
-	v4, err := connection.New("udp4", *listenAddr)
-	if err != nil {
-		log.Fatalf("Error opening IPv4 connection: %v", err)
-	}
-	v6, err := connection.New("udp6", *listenAddr)
-	if err != nil {
-		log.Fatalf("Error opening IPv6 connection: %v", err)
-	}
-	return v4, v6
+// TODO: privileged ping support.
+func newV4Conn() (backend.Conn, error) {
+	return icmp.New("udp4", *listenAddr)
+}
+
+func newV6Conn() (backend.Conn, error) {
+	return icmp.New("udp6", *listenAddr)
 }
