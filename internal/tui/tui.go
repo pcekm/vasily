@@ -131,7 +131,7 @@ func (m *Model) startPingerCmd(key table.RowKey, target net.Addr) tea.Cmd {
 		opts.Callback = func(int, pinger.PingResult) {
 			m.rowUpdates <- key
 		}
-		ping, err := pinger.Ping(m.connFuncForAddr(target), target, &opts)
+		ping, err := pinger.New(m.connFuncForAddr(target), target, &opts)
 		if err != nil {
 			return err
 		}

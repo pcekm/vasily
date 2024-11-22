@@ -192,9 +192,9 @@ type Pinger struct {
 	stats   Stats
 }
 
-// Ping creates a new pinger and starts pinging. It will continue until Close()
+// New creates a new pinger and starts pinging. It will continue until Close()
 // is called.
-func Ping(newConn backend.NewConn, dest net.Addr, opts *Options) (*Pinger, error) {
+func New(newConn backend.NewConn, dest net.Addr, opts *Options) (*Pinger, error) {
 	id := opts.id()
 	if id == 0 {
 		id = util.GenID()

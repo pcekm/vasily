@@ -53,7 +53,7 @@ func TestLive(t *testing.T) {
 			callbackRes[seq] = res
 		},
 	}
-	p, err := Ping(func() (backend.Conn, error) { return icmp.New("udp4", "") }, test.LoopbackV4, opts)
+	p, err := New(func() (backend.Conn, error) { return icmp.New("udp4", "") }, test.LoopbackV4, opts)
 	if err != nil {
 		t.Fatalf("Error creating pinger: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestCallbacks(t *testing.T) {
 			callbacks = append(callbacks, res)
 		},
 	}
-	p, err := Ping(newConnFunc(conn), addr, opts)
+	p, err := New(newConnFunc(conn), addr, opts)
 	if err != nil {
 		t.Fatalf("Error creating pinger: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestPacketLoss(t *testing.T) {
 		ID:       id,
 		Timeout:  time.Millisecond,
 	}
-	p, err := Ping(newConnFunc(conn), test.LoopbackV4, opts)
+	p, err := New(newConnFunc(conn), test.LoopbackV4, opts)
 	if err != nil {
 		t.Fatalf("Error creating pinger: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestDuplicatePacket(t *testing.T) {
 		ID:       id,
 		Timeout:  time.Millisecond,
 	}
-	p, err := Ping(newConnFunc(conn), test.LoopbackV4, opts)
+	p, err := New(newConnFunc(conn), test.LoopbackV4, opts)
 	if err != nil {
 		t.Fatalf("Error creating pinger: %v", err)
 	}
@@ -355,7 +355,7 @@ func TestHistory(t *testing.T) {
 				ID:       id,
 				Timeout:  4 * time.Millisecond,
 			}
-			p, err := Ping(newConnFunc(conn), test.LoopbackV4, opts)
+			p, err := New(newConnFunc(conn), test.LoopbackV4, opts)
 			if err != nil {
 				t.Fatalf("Error creating pinger: %v", err)
 			}
@@ -396,7 +396,7 @@ func TestWrongIDRejection(t *testing.T) {
 		ID:       id1,
 		Timeout:  100 * time.Microsecond,
 	}
-	p, err := Ping(newConnFunc(conn), test.LoopbackV4, opts)
+	p, err := New(newConnFunc(conn), test.LoopbackV4, opts)
 	if err != nil {
 		t.Fatalf("Error creating pinger: %v", err)
 	}
