@@ -1,5 +1,5 @@
 /*
-Package privileged contains code that is meant to run as root.
+Package privsep contains code for running some code as root.
 
 This works as a client/server, where the main part of the program is the client,
 and the privileged part runs in a separate process as a server. The two are
@@ -18,10 +18,10 @@ root privileges on most systems. There are two notable exceptions to this:
     Which means that for the purposes of this program, which does traceroutes,
     root is still necessary.
 
-The normal approach in a ping program is to open the raw socket and then
-immediately drop privileges. However, since this program is interactive, things
-are more complicated. As long as new sockets need be opened, it's necessary to
-maintain privileges. Privilege separation is the next best thing.
+A frequent, simpler approach is to open the raw socket and then immediately drop
+privileges. However, since this program is interactive, things are more
+complicated. As long as new sockets need be opened, it's necessary to maintain
+privileges. Privilege separation is the next best thing.
 
 # Rules
 
@@ -62,7 +62,7 @@ cause it to immediately exit. The unprivileged client can be more forgiving.
 
 [Postel's law]: https://en.wikipedia.org/wiki/Robustness_principle
 */
-package privileged
+package privsep
 
 import (
 	"fmt"

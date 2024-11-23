@@ -12,8 +12,8 @@ import (
 
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/backend/icmp"
+	"github.com/pcekm/graphping/internal/backend/privsep"
 	"github.com/pcekm/graphping/internal/lookup"
-	"github.com/pcekm/graphping/internal/privileged"
 	"github.com/pcekm/graphping/internal/tui"
 )
 
@@ -30,7 +30,7 @@ func init() {
 }
 
 func main() {
-	privClient := privileged.Initialize()
+	privClient := privsep.Initialize()
 	defer privClient.Close()
 
 	pflag.Parse()

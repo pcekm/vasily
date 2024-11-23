@@ -2,7 +2,7 @@
 // library? Safer than protobufs? Safer than strings and Scanf? Simpler than
 // either?
 
-package privileged
+package privsep
 
 import (
 	"bytes"

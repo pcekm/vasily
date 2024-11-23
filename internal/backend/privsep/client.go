@@ -1,12 +1,13 @@
 // TODO: This belongs in a separate package since it doesn't run as root.
 
-package privileged
+package privsep
 
 import (
 	"io"
 	"os/exec"
 )
 
+// Client is the privsep
 type Client struct {
 	privCmd *exec.Cmd
 	in      io.ReadCloser
