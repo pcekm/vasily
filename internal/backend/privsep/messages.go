@@ -1,4 +1,4 @@
-// TODO: There's a lot of code here. Is it _really_ safer than a third party
+// TODO: There's a lot of code here. Is it really safer than a third party
 // library? Safer than protobufs? Safer than strings and Scanf? Simpler than
 // either?
 
@@ -25,6 +25,40 @@ var (
 	// while decoding a message.
 	ErrInvalidMessageType = errors.New("invalid message type")
 )
+
+// Used in a panic to communicate an error back up to the top level decode
+// operation. This deliberately doesn't implement error. It's meant to be
+// unpacked and the original error returned.
+type caughtErr struct {
+	Err error
+}
+
+// Panics with the given error message.
+func panicMsg(msg string) {
+	panic(caughtErr{Err: errors.New(msg)})
+}
+
+// Panics with the given format and args.
+func panicMsgf(s string, args ...any) {
+	panic(caughtErr{Err: fmt.Errorf(s, args...)})
+}
+
+// Panics with the given error.
+func panicErr(err error) {
+	panic(caughtErr{Err: err})
+}
+
+// Catches panics sent with panicErr and panicErrf and sets err. Other panic
+// values are re-panicked.
+func catchError(err *error) {
+	if e := recover(); e != nil {
+		if e, ok := e.(caughtErr); ok {
+			*err = e.Err
+			return
+		}
+		panic(e)
+	}
+}
 
 // Type of message send between the client and server.
 type messageType byte
@@ -82,28 +116,30 @@ type Message interface {
 
 // ReadMessage reads and decodes a message.
 func ReadMessage(r io.ByteReader) (msg Message, err error) {
+	defer catchError(&err)
 	raw, err := readRawMessage(r)
 	if err != nil {
 		return nil, err
 	}
 	switch raw.Type {
 	case msgShutdown:
-		return raw.asShutdown()
+		msg = raw.asShutdown()
 	case msgPrivilegeDrop:
-		return raw.asPrivilegeDrop()
+		msg = raw.asPrivilegeDrop()
 	case msgOpenConnection:
-		return raw.asOpenConnection()
+		msg = raw.asOpenConnection()
 	case msgOpenConnectionReply:
-		return raw.asOpenConnectionReply()
+		msg = raw.asOpenConnectionReply()
 	case msgCloseConnection:
-		return raw.asCloseConnection()
+		msg = raw.asCloseConnection()
 	case msgSendPing:
-		return raw.asSendPing()
+		msg = raw.asSendPing()
 	case msgPingReply:
-		return raw.asPingReply()
+		msg = raw.asPingReply()
 	default:
-		return raw, nil
+		msg = raw
 	}
+	return msg, err
 }
 
 // ConnectionID is an identifier for an open connection.
@@ -171,30 +207,64 @@ func (m RawMessage) WriteTo(w io.Writer) (int64, error) {
 	return int64(n), err
 }
 
+// Checks the argument count and panics with an error if it's wrong.
+func (m RawMessage) checkNArgs(want int) {
+	if len(m.Args) != want {
+		panicMsgf("unexpected argument count: %d (want %d)", m.Args, want)
+	}
+}
+
+// Checks the argument exists and panics with an error if it doesn't.
+func (m RawMessage) checkArgExists(i int) {
+	if len(m.Args) <= i {
+		panicMsgf("arg %d not found", i)
+	}
+}
+
+// Checks the argument exists and has the given length and panics with an error
+// if something is wrong.
+func (m RawMessage) checkArgLen(i, wantLen int) {
+	m.checkArgExists(i)
+	if len(m.Args[i]) != wantLen {
+		panicMsgf("arg %d is %d bytes (want %d)", i, len(m.Args[i]), wantLen)
+	}
+}
+
 // Checks the type of a raw message and panics if it's unexpected.
-// This is a bug if it happens.
+// This is a bug if it happens, so no panic recovery for this.
 func (m RawMessage) checkType(want messageType) {
 	if m.Type != want {
 		log.Panicf("Wrong message type: %v (want %v)", m.Type, want)
 	}
 }
 
-// Checks that message has zero args and the given message type.
-func (m RawMessage) checkZA(t messageType) error {
-	m.checkType(t)
-	if len(m.Args) != 0 {
-		return fmt.Errorf("nonempty raw args: %v", m.Args)
-	}
-	return nil
+// Gets a string arg at position i.
+func (m RawMessage) argString(i int) string {
+	m.checkArgExists(i)
+	return string(m.Args[i])
+}
+
+// Gets a byte arg at position i.
+func (m RawMessage) argByte(i int) byte {
+	m.checkArgLen(i, 1)
+	return m.Args[i][0]
+}
+
+// Gets a big-endian uint16 arg at position i.
+func (m RawMessage) argUint16(i int) uint16 {
+	m.checkArgLen(i, 2)
+	return uint16(m.Args[i][0])<<8 | uint16(m.Args[i][1])
+}
+
+// Gets a []byte arg at position i.
+func (m RawMessage) argBytes(i int) []byte {
+	m.checkArgExists(i)
+	return m.Args[i]
 }
 
 // Decodes a connection id at argument index i.
-func (m RawMessage) decodeConnectionID(i int) (id ConnectionID, err error) {
-	if len(m.Args) <= i {
-		return id, fmt.Errorf("no arg at index %d", i)
-	}
-	id = ConnectionID(m.Args[i])
-	return id, nil
+func (m RawMessage) decodeConnectionID(i int) ConnectionID {
+	return ConnectionID(m.argString(i))
 }
 
 // Decodes a [backend.Packet] at index i.
@@ -206,40 +276,37 @@ func (m RawMessage) decodeConnectionID(i int) (id ConnectionID, err error) {
 //	<seq>:        2 bytes; unsigned, big endian sequence number
 //	<payloadLen>: 1 byte; length of payload
 //	<payload>:    sequence of payloadLen bytes
-func (m RawMessage) decodePacket(i int) (pkt backend.Packet, err error) {
-	if len(m.Args) <= i {
-		return pkt, fmt.Errorf("no arg at index %d", i)
-	}
+func (m RawMessage) decodePacket(i int) backend.Packet {
+	m.checkArgExists(i)
 	buf := bytes.NewBuffer(m.Args[i])
 	tp, err := buf.ReadByte()
 	if err != nil {
-		return pkt, fmt.Errorf("error reading packet type: %v", err)
+		panicMsgf("error reading packet type: %v", err)
 	}
 	var seq uint16
 	if err := binary.Read(buf, binary.BigEndian, &seq); err != nil {
-		return pkt, fmt.Errorf("error reading sequence number: %#v", err)
+		panicMsgf("error reading sequence number: %#v", err)
 	}
 	plen, err := buf.ReadByte()
 	if err != nil {
-		return pkt, fmt.Errorf("error reading payload len: %v", err)
+		panicMsgf("error reading payload len: %v", err)
 	}
 	payload := make([]byte, plen)
 	n, err := buf.Read(payload)
 	if err != nil {
-		return pkt, fmt.Errorf("error reading payload: %v", err)
+		panicMsgf("error reading payload: %v", err)
 	}
 	if n != int(plen) {
-		return pkt, fmt.Errorf("short payload: %d bytes (want %d)", n, plen)
+		panicMsgf("short payload: %d bytes (want %d)", n, plen)
 	}
 	if buf.Len() != 0 {
-		return pkt, fmt.Errorf("unused %d extra bytes at end of payload", buf.Len())
+		panicMsgf("unused %d extra bytes at end of payload", buf.Len())
 	}
-	pkt = backend.Packet{
+	return backend.Packet{
 		Type:    backend.PacketType(tp),
 		Seq:     int(seq),
 		Payload: payload,
 	}
-	return pkt, nil
 }
 
 // Encodes a packet. Silently truncates a payload that's too long.
@@ -266,8 +333,10 @@ func (Shutdown) WriteTo(w io.Writer) (int64, error) {
 	return raw.WriteTo(w)
 }
 
-func (m RawMessage) asShutdown() (msg Shutdown, err error) {
-	return msg, m.checkZA(msgShutdown)
+func (m RawMessage) asShutdown() (msg Shutdown) {
+	m.checkType(msgShutdown)
+	m.checkNArgs(0)
+	return msg
 }
 
 // PrivilegeDrop is a message sent to the server telling it to drop privileges.
@@ -280,8 +349,10 @@ func (PrivilegeDrop) WriteTo(w io.Writer) (int64, error) {
 	return raw.WriteTo(w)
 }
 
-func (m RawMessage) asPrivilegeDrop() (msg PrivilegeDrop, err error) {
-	return msg, m.checkZA(msgPrivilegeDrop)
+func (m RawMessage) asPrivilegeDrop() (msg PrivilegeDrop) {
+	m.checkType(msgPrivilegeDrop)
+	m.checkNArgs(0)
+	return msg
 }
 
 // OpenConnection is a message to open a new ICMP connection.
@@ -292,8 +363,10 @@ func (OpenConnection) WriteTo(w io.Writer) (int64, error) {
 	return raw.WriteTo(w)
 }
 
-func (m RawMessage) asOpenConnection() (msg OpenConnection, err error) {
-	return msg, m.checkZA(msgOpenConnection)
+func (m RawMessage) asOpenConnection() (msg OpenConnection) {
+	m.checkType(msgOpenConnection)
+	m.checkNArgs(0)
+	return msg
 }
 
 // OpenConnectionReply is a message to open a new ICMP connection.
@@ -310,13 +383,11 @@ func (o OpenConnectionReply) WriteTo(w io.Writer) (int64, error) {
 	return raw.WriteTo(w)
 }
 
-func (m RawMessage) asOpenConnectionReply() (msg OpenConnectionReply, err error) {
+func (m RawMessage) asOpenConnectionReply() (msg OpenConnectionReply) {
 	m.checkType(msgOpenConnectionReply)
-	if len(m.Args) != 1 {
-		return msg, fmt.Errorf("wrong number of args: %d", len(m.Args))
-	}
-	msg.ID, err = m.decodeConnectionID(0)
-	return msg, err
+	m.checkNArgs(1)
+	msg.ID = m.decodeConnectionID(0)
+	return msg
 }
 
 // CloseConnection is a message to close an existing ICMP connection.
@@ -333,13 +404,11 @@ func (c CloseConnection) WriteTo(w io.Writer) (int64, error) {
 	return raw.WriteTo(w)
 }
 
-func (m RawMessage) asCloseConnection() (msg CloseConnection, err error) {
+func (m RawMessage) asCloseConnection() (msg CloseConnection) {
 	m.checkType(msgCloseConnection)
-	if len(m.Args) != 1 {
-		return msg, fmt.Errorf("wrong number of args: %d", len(m.Args))
-	}
-	msg.ID, err = m.decodeConnectionID(0)
-	return msg, err
+	m.checkNArgs(1)
+	msg.ID = m.decodeConnectionID(0)
+	return msg
 }
 
 // SendPing is a message to send a ping.
@@ -363,17 +432,13 @@ func (s SendPing) WriteTo(w io.Writer) (int64, error) {
 	return raw.WriteTo(w)
 }
 
-func (m RawMessage) asSendPing() (msg SendPing, err error) {
+func (m RawMessage) asSendPing() SendPing {
 	m.checkType(msgSendPing)
-	if len(m.Args) != 2 {
-		return msg, fmt.Errorf("wrong number of args: %d", len(m.Args))
+	m.checkNArgs(2)
+	return SendPing{
+		ID:     m.decodeConnectionID(0),
+		Packet: m.decodePacket(1),
 	}
-	msg.ID, err = m.decodeConnectionID(0)
-	if err != nil {
-		return msg, err
-	}
-	msg.Packet, err = m.decodePacket(1)
-	return msg, err
 }
 
 // PingReply is a message with the response to a ping.
@@ -396,15 +461,11 @@ func (p PingReply) WriteTo(w io.Writer) (int64, error) {
 	}
 	return raw.WriteTo(w)
 }
-func (m RawMessage) asPingReply() (msg PingReply, err error) {
+func (m RawMessage) asPingReply() PingReply {
 	m.checkType(msgPingReply)
-	if len(m.Args) != 2 {
-		return msg, fmt.Errorf("wrong number of args: %d", len(m.Args))
+	m.checkNArgs(2)
+	return PingReply{
+		ID:     m.decodeConnectionID(0),
+		Packet: m.decodePacket(1),
 	}
-	msg.ID, err = m.decodeConnectionID(0)
-	if err != nil {
-		return msg, err
-	}
-	msg.Packet, err = m.decodePacket(1)
-	return msg, err
 }
