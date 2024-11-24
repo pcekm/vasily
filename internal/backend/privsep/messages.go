@@ -12,6 +12,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"net"
 
 	"github.com/pcekm/graphping/internal/backend"
 )
@@ -109,6 +110,25 @@ func (t messageType) String() string {
 	}
 }
 
+// IPVersion is the version of IP to  use.
+type IPVersion byte
+
+const (
+	IPv4 IPVersion = 4
+	IPv6 IPVersion = 6
+)
+
+func (v IPVersion) String() string {
+	switch v {
+	case IPv4:
+		return "IPv4"
+	case IPv6:
+		return "IPv6"
+	default:
+		return fmt.Sprintf("(unknown:%d)", v)
+	}
+}
+
 // Message holds a protocol message.
 type Message interface {
 	io.WriterTo
@@ -143,7 +163,11 @@ func ReadMessage(r io.ByteReader) (msg Message, err error) {
 }
 
 // ConnectionID is an identifier for an open connection.
-type ConnectionID string
+type ConnectionID int
+
+func (n ConnectionID) encode() []byte {
+	return encodeInt(int(n))
+}
 
 // RawMessage is a basic message.
 type RawMessage struct {
@@ -256,6 +280,12 @@ func (m RawMessage) argUint16(i int) uint16 {
 	return uint16(m.Args[i][0])<<8 | uint16(m.Args[i][1])
 }
 
+// Gets a big-endian 32-bit int arg at position i.
+func (m RawMessage) argInt(i int) int {
+	m.checkArgLen(i, 4)
+	return int(m.Args[i][0])<<24 | int(m.Args[i][1])<<16 | int(m.Args[i][2])<<8 | int(m.Args[i][3])
+}
+
 // Gets a []byte arg at position i.
 func (m RawMessage) argBytes(i int) []byte {
 	m.checkArgExists(i)
@@ -263,8 +293,22 @@ func (m RawMessage) argBytes(i int) []byte {
 }
 
 // Decodes a connection id at argument index i.
-func (m RawMessage) decodeConnectionID(i int) ConnectionID {
-	return ConnectionID(m.argString(i))
+func (m RawMessage) argConnectionID(i int) ConnectionID {
+	return ConnectionID(m.argInt(i))
+}
+
+// Gets an IPVersion arg at position i.
+func (m RawMessage) argIPVersion(i int) IPVersion {
+	return IPVersion(m.argByte(i))
+}
+
+// Gets an IP address arg at position i.
+func (m RawMessage) argIP(i int) net.IP {
+	ip := net.IP(m.argBytes(i))
+	if len(ip) != 4 && len(ip) != 16 {
+		panicMsgf("wrong IP length: %d", len(ip))
+	}
+	return ip
 }
 
 // Decodes a [backend.Packet] at index i.
@@ -325,6 +369,16 @@ func encodePacket(pkt backend.Packet) []byte {
 	return buf.Bytes()
 }
 
+// Encodes a 32-bit signed int in big-endian order.
+func encodeInt(n int) []byte {
+	return []byte{
+		byte(n >> 24),
+		byte(n >> 16),
+		byte(n >> 8),
+		byte(n),
+	}
+}
+
 // Shutdown is a message sent to the server telling it to exit.
 type Shutdown struct{}
 
@@ -356,17 +410,21 @@ func (m RawMessage) asPrivilegeDrop() (msg PrivilegeDrop) {
 }
 
 // OpenConnection is a message to open a new ICMP connection.
-type OpenConnection struct{}
+type OpenConnection struct {
+	IPVer IPVersion
+}
 
-func (OpenConnection) WriteTo(w io.Writer) (int64, error) {
-	raw := RawMessage{Type: msgOpenConnection}
+func (c OpenConnection) WriteTo(w io.Writer) (int64, error) {
+	raw := RawMessage{
+		Type: msgOpenConnection,
+		Args: [][]byte{{byte(c.IPVer)}},
+	}
 	return raw.WriteTo(w)
 }
 
-func (m RawMessage) asOpenConnection() (msg OpenConnection) {
+func (m RawMessage) asOpenConnection() OpenConnection {
 	m.checkType(msgOpenConnection)
-	m.checkNArgs(0)
-	return msg
+	return OpenConnection{IPVer: m.argIPVersion(0)}
 }
 
 // OpenConnectionReply is a message to open a new ICMP connection.
@@ -378,7 +436,7 @@ type OpenConnectionReply struct {
 func (o OpenConnectionReply) WriteTo(w io.Writer) (int64, error) {
 	raw := RawMessage{
 		Type: msgOpenConnectionReply,
-		Args: [][]byte{[]byte(o.ID)},
+		Args: [][]byte{o.ID.encode()},
 	}
 	return raw.WriteTo(w)
 }
@@ -386,7 +444,7 @@ func (o OpenConnectionReply) WriteTo(w io.Writer) (int64, error) {
 func (m RawMessage) asOpenConnectionReply() (msg OpenConnectionReply) {
 	m.checkType(msgOpenConnectionReply)
 	m.checkNArgs(1)
-	msg.ID = m.decodeConnectionID(0)
+	msg.ID = m.argConnectionID(0)
 	return msg
 }
 
@@ -399,7 +457,7 @@ type CloseConnection struct {
 func (c CloseConnection) WriteTo(w io.Writer) (int64, error) {
 	raw := RawMessage{
 		Type: msgCloseConnection,
-		Args: [][]byte{[]byte(c.ID)},
+		Args: [][]byte{c.ID.encode()},
 	}
 	return raw.WriteTo(w)
 }
@@ -407,7 +465,7 @@ func (c CloseConnection) WriteTo(w io.Writer) (int64, error) {
 func (m RawMessage) asCloseConnection() (msg CloseConnection) {
 	m.checkType(msgCloseConnection)
 	m.checkNArgs(1)
-	msg.ID = m.decodeConnectionID(0)
+	msg.ID = m.argConnectionID(0)
 	return msg
 }
 
@@ -419,14 +477,23 @@ type SendPing struct {
 	// Packet is the ping message to send. The message type _must_ be
 	// PacketRequest.
 	Packet backend.Packet
+
+	// Addr is the address to ping.
+	Addr net.IP
+
+	// TTL is the time to live for the outgoing packet. Zero means use the
+	// default.
+	TTL int
 }
 
 func (s SendPing) WriteTo(w io.Writer) (int64, error) {
 	raw := RawMessage{
 		Type: msgSendPing,
 		Args: [][]byte{
-			[]byte(s.ID),
+			s.ID.encode(),
 			encodePacket(s.Packet),
+			[]byte(s.Addr),
+			encodeInt(s.TTL),
 		},
 	}
 	return raw.WriteTo(w)
@@ -434,10 +501,12 @@ func (s SendPing) WriteTo(w io.Writer) (int64, error) {
 
 func (m RawMessage) asSendPing() SendPing {
 	m.checkType(msgSendPing)
-	m.checkNArgs(2)
+	m.checkNArgs(4)
 	return SendPing{
-		ID:     m.decodeConnectionID(0),
+		ID:     m.argConnectionID(0),
 		Packet: m.decodePacket(1),
+		Addr:   m.argIP(2),
+		TTL:    m.argInt(3),
 	}
 }
 
@@ -449,23 +518,28 @@ type PingReply struct {
 
 	// Packet is the ping message received.
 	Packet backend.Packet
+
+	// Peer is the host the packet was received from.
+	Peer net.IP
 }
 
 func (p PingReply) WriteTo(w io.Writer) (int64, error) {
 	raw := RawMessage{
 		Type: msgPingReply,
 		Args: [][]byte{
-			[]byte(p.ID),
+			p.ID.encode(),
 			encodePacket(p.Packet),
+			[]byte(p.Peer),
 		},
 	}
 	return raw.WriteTo(w)
 }
 func (m RawMessage) asPingReply() PingReply {
 	m.checkType(msgPingReply)
-	m.checkNArgs(2)
+	m.checkNArgs(3)
 	return PingReply{
-		ID:     m.decodeConnectionID(0),
+		ID:     m.argConnectionID(0),
 		Packet: m.decodePacket(1),
+		Peer:   m.argIP(2),
 	}
 }

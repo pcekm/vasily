@@ -57,6 +57,15 @@ The maximum message length is:
 
 	2 + 255 * (1 + 255) = 65282
 
+backend.Packet is formatted as:
+
+	<packet-type><seq><payload-len><payload>
+
+	<packet-type>: 1 byte
+	<seq>:         2 byte big endian sequence number
+	<payload-len>: 1 byte
+	<payload>:     payload-len bytes
+
 Any unrecognized or improperly-formatted messages to the privileged server will
 cause it to immediately exit. The unprivileged client can be more forgiving.
 

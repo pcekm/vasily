@@ -3,6 +3,7 @@ package privsep
 import (
 	"bytes"
 	"log"
+	"net"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -51,11 +52,20 @@ func TestReadMessage(t *testing.T) {
 		{Name: "Shutdown", Encoded: []byte{byte(msgShutdown), 0}, Want: Shutdown{}},
 		{Name: "Shutdown/ExtraArgs", Encoded: []byte{byte(msgShutdown), 1, 0}, WantErr: true},
 		{Name: "PrivilegeDrop", Encoded: []byte{byte(msgPrivilegeDrop), 0}, Want: PrivilegeDrop{}},
-		{Name: "OpenConnection", Encoded: []byte{byte(msgOpenConnection), 0}, Want: OpenConnection{}},
+		{
+			Name:    "OpenConnection",
+			Encoded: []byte{byte(msgOpenConnection), 1, 1, 4},
+			Want:    OpenConnection{IPVer: IPv4},
+		},
+		{
+			Name:    "OpenConnection/MissingIPVer",
+			Encoded: []byte{byte(msgOpenConnection), 0},
+			WantErr: true,
+		},
 		{
 			Name:    "OpenConnectionReply",
-			Encoded: []byte{byte(msgOpenConnectionReply), 1, 3, 102, 111, 111},
-			Want:    OpenConnectionReply{ID: "foo"},
+			Encoded: []byte{byte(msgOpenConnectionReply), 1, 4, 0, 0, 0, 1},
+			Want:    OpenConnectionReply{ID: 1},
 		},
 		{
 			Name:    "OpenConnectionReply/MissingConnectionID",
@@ -69,8 +79,8 @@ func TestReadMessage(t *testing.T) {
 		},
 		{
 			Name:    "CloseConnection",
-			Encoded: []byte{byte(msgCloseConnection), 1, 3, 98, 97, 114},
-			Want:    CloseConnection{ID: "bar"},
+			Encoded: []byte{byte(msgCloseConnection), 1, 4, 0xde, 0xad, 0xbe, 0xef},
+			Want:    CloseConnection{ID: 0xdeadbeef},
 		},
 		{
 			Name:    "CloseConnection/TooManyArgs",
@@ -79,97 +89,65 @@ func TestReadMessage(t *testing.T) {
 		},
 		{
 			Name:    "SendPing",
-			Encoded: []byte{byte(msgSendPing), 2, 1, 88, 7, 1, 2, 3, 3, 4, 5, 6},
+			Encoded: []byte{byte(msgSendPing), 4, 4, 0, 0, 0, 88, 7, 1, 2, 3, 3, 4, 5, 6, 4, 192, 0, 2, 1, 4, 0, 0, 0, 11},
 			Want: SendPing{
-				ID: "X",
+				ID: 88,
 				Packet: backend.Packet{
 					Type:    backend.PacketReply,
 					Seq:     0x0203,
 					Payload: []byte{4, 5, 6},
 				},
+				Addr: net.ParseIP("192.0.2.1"),
+				TTL:  11,
 			},
 		},
 		{
-			Name:    "SendPing/MissingArg",
-			Encoded: marshalRawMsg(RawMessage{Type: msgSendPing, Args: [][]byte{{0}}}),
+			Name:    "SendPing/MissingArgs",
+			Encoded: marshalRawMsg(RawMessage{Type: msgSendPing, Args: [][]byte{{0, 0, 0, 0}}}),
 			WantErr: true,
 		},
 		{
-			Name:    "SendPing/MissingPacketType",
-			Encoded: marshalRawMsg(RawMessage{Type: msgSendPing, Args: [][]byte{{0}, {}}}),
+			Name:    "SendPing/Packet/MissingType",
+			Encoded: marshalRawMsg(RawMessage{Type: msgSendPing, Args: [][]byte{{0, 0, 0, 0}, {}, {192, 0, 2, 1}, {0, 0, 0, 0}}}),
 			WantErr: true,
 		},
 		{
-			Name:    "SendPing/MissingSequence",
-			Encoded: marshalRawMsg(RawMessage{Type: msgSendPing, Args: [][]byte{{0}, {0}}}),
+			Name:    "SendPing/Packet/MissingSequence",
+			Encoded: marshalRawMsg(RawMessage{Type: msgSendPing, Args: [][]byte{{0, 0, 0, 0}, {0}, {192, 0, 2, 1}, {0, 0, 0, 0}}}),
 			WantErr: true,
 		},
 		{
-			Name:    "SendPing/MissingPayloadLen",
-			Encoded: marshalRawMsg(RawMessage{Type: msgSendPing, Args: [][]byte{{0}, {0, 1, 2}}}),
+			Name:    "SendPing/Packet/MissingPayloadLen",
+			Encoded: marshalRawMsg(RawMessage{Type: msgSendPing, Args: [][]byte{{0, 0, 0, 0}, {0, 1, 2}, {192, 0, 2, 1}, {0, 0, 0, 0}}}),
 			WantErr: true,
 		},
 		{
-			Name:    "SendPing/MissingPayload",
-			Encoded: marshalRawMsg(RawMessage{Type: msgSendPing, Args: [][]byte{{0}, {0, 1, 2, 3}}}),
+			Name:    "SendPing/Packet/MissingPayload",
+			Encoded: marshalRawMsg(RawMessage{Type: msgSendPing, Args: [][]byte{{0, 0, 0, 0}, {0, 1, 2, 3}, {192, 0, 2, 1}, {0, 0, 0, 0}}}),
 			WantErr: true,
 		},
 		{
-			Name:    "SendPing/ShortPayload",
-			Encoded: marshalRawMsg(RawMessage{Type: msgSendPing, Args: [][]byte{{0}, {0, 1, 2, 3, 0, 0}}}),
+			Name:    "SendPing/Packet/ShortPayload",
+			Encoded: marshalRawMsg(RawMessage{Type: msgSendPing, Args: [][]byte{{0, 0, 0, 0}, {0, 1, 2, 3, 0, 0}, {192, 0, 2, 1}, {0, 0, 0, 0}}}),
 			WantErr: true,
 		},
 		{
-			Name:    "SendPing/CruftAtEnd",
-			Encoded: marshalRawMsg(RawMessage{Type: msgSendPing, Args: [][]byte{{0}, {0, 1, 2, 3, 0, 0, 0, 9}}}),
+			Name:    "SendPing/Packet/CruftAtEnd",
+			Encoded: marshalRawMsg(RawMessage{Type: msgSendPing, Args: [][]byte{{0, 0, 0, 0}, {0, 1, 2, 3, 0, 0, 0, 9}, {192, 0, 2, 1}, {0, 0, 0, 0}}}),
 			WantErr: true,
 		},
 		{
 			Name:    "PingReply",
-			Encoded: []byte{byte(msgPingReply), 2, 1, 89, 9, 2, 3, 4, 5, 5, 6, 7, 8, 9},
+			Encoded: []byte{byte(msgPingReply), 3, 4, 0, 0, 0, 89, 9, 2, 3, 4, 5, 5, 6, 7, 8, 9, 16, 0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
 			Want: PingReply{
-				ID: "Y",
+				ID: 89,
 				Packet: backend.Packet{
 					Type:    backend.PacketTimeExceeded,
 					Seq:     0x0304,
 					Payload: []byte{5, 6, 7, 8, 9},
 				},
+				Peer: net.ParseIP("2001:db8::1"),
 			},
-		},
-		{
-			Name:    "PingReply/MissingArg",
-			Encoded: marshalRawMsg(RawMessage{Type: msgPingReply, Args: [][]byte{{0}}}),
-			WantErr: true,
-		},
-		{
-			Name:    "PingReply/MissingPacketType",
-			Encoded: marshalRawMsg(RawMessage{Type: msgPingReply, Args: [][]byte{{0}, {}}}),
-			WantErr: true,
-		},
-		{
-			Name:    "PingReply/MissingSequence",
-			Encoded: marshalRawMsg(RawMessage{Type: msgPingReply, Args: [][]byte{{0}, {0}}}),
-			WantErr: true,
-		},
-		{
-			Name:    "PingReply/MissingPayloadLen",
-			Encoded: marshalRawMsg(RawMessage{Type: msgPingReply, Args: [][]byte{{0}, {0, 1, 2}}}),
-			WantErr: true,
-		},
-		{
-			Name:    "PingReply/MissingPayload",
-			Encoded: marshalRawMsg(RawMessage{Type: msgPingReply, Args: [][]byte{{0}, {0, 1, 2, 3}}}),
-			WantErr: true,
-		},
-		{
-			Name:    "PingReply/ShortPayload",
-			Encoded: marshalRawMsg(RawMessage{Type: msgPingReply, Args: [][]byte{{0}, {0, 1, 2, 3, 0, 0}}}),
-			WantErr: true,
-		},
-		{
-			Name:    "PingReply/CruftAtEnd",
-			Encoded: marshalRawMsg(RawMessage{Type: msgPingReply, Args: [][]byte{{0}, {0, 1, 2, 3, 0, 0, 0, 9}}}),
-			WantErr: true,
 		},
 		{Name: "OneEmptyArg", Encoded: []byte{254, 1, 0}, Want: RawMessage{Type: 254, Args: [][]byte{{}}}},
 		{
@@ -221,38 +199,45 @@ func TestMessage_WriteTo(t *testing.T) {
 
 		{Name: "Shutdown", Msg: Shutdown{}, Want: []byte{byte(msgShutdown), 0}},
 		{Name: "PrivilegeDrop", Msg: PrivilegeDrop{}, Want: []byte{byte(msgPrivilegeDrop), 0}},
-		{Name: "OpenConnection", Msg: OpenConnection{}, Want: []byte{byte(msgOpenConnection), 0}},
+		{
+			Name: "OpenConnection",
+			Msg:  OpenConnection{IPVer: IPv6},
+			Want: []byte{byte(msgOpenConnection), 1, 1, 6},
+		},
 		{
 			Name: "OpenConnectionReply",
-			Msg:  OpenConnectionReply{ID: "foo"},
-			Want: []byte{byte(msgOpenConnectionReply), 1, 3, 102, 111, 111},
+			Msg:  OpenConnectionReply{ID: 1},
+			Want: []byte{byte(msgOpenConnectionReply), 1, 4, 0, 0, 0, 1},
 		},
 		{
 			Name: "CloseConnection",
-			Msg:  CloseConnection{ID: "bar"},
-			Want: []byte{byte(msgCloseConnection), 1, 3, 98, 97, 114},
+			Msg:  CloseConnection{ID: 0xdeadbeef},
+			Want: []byte{byte(msgCloseConnection), 1, 4, 0xde, 0xad, 0xbe, 0xef},
 		},
 		{
 			Name: "SendPing",
 			Msg: SendPing{
-				ID: "X", Packet: backend.Packet{
+				ID: 88, Packet: backend.Packet{
 					Type:    backend.PacketTimeExceeded,
 					Seq:     0x0203,
 					Payload: []byte{4, 5},
 				},
+				Addr: net.ParseIP("192.0.2.2").To4(),
+				TTL:  7,
 			},
-			Want: []byte{byte(msgSendPing), 2, 1, 88, 6, 2, 2, 3, 2, 4, 5},
+			Want: []byte{byte(msgSendPing), 4, 4, 0, 0, 0, 88, 6, 2, 2, 3, 2, 4, 5, 4, 192, 0, 2, 2, 4, 0, 0, 0, 7},
 		},
 		{
 			Name: "PingReply",
 			Msg: PingReply{
-				ID: "P", Packet: backend.Packet{
+				ID: 80, Packet: backend.Packet{
 					Type:    backend.PacketReply,
 					Seq:     0x0405,
 					Payload: []byte{6, 7, 8},
 				},
+				Peer: net.ParseIP("2001:db8::1"),
 			},
-			Want: []byte{byte(msgPingReply), 2, 1, 80, 7, 1, 4, 5, 3, 6, 7, 8},
+			Want: []byte{byte(msgPingReply), 3, 4, 0, 0, 0, 80, 7, 1, 4, 5, 3, 6, 7, 8, 16, 0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
 		},
 
 		{Name: "TooManyArgs", Msg: RawMessage{Args: make([][]byte, 256)}, WantErr: true},
