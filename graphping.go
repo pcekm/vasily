@@ -30,8 +30,12 @@ func init() {
 }
 
 func main() {
-	privClient := privsep.Initialize()
-	defer privClient.Close()
+	privClient, srvCmd := privsep.Initialize()
+	defer func() {
+		privClient.Close()
+		srvCmd.Process.Kill()
+		srvCmd.Wait()
+	}()
 
 	pflag.Parse()
 

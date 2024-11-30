@@ -2,7 +2,9 @@
 // library? Safer than protobufs? Safer than strings and Scanf? Simpler than
 // either?
 
-package privsep
+// Package messages contains messages that are passed between the privsep client
+// and server and functions for encoding and decoding them.
+package messages
 
 import (
 	"bytes"
@@ -82,6 +84,9 @@ const (
 	// msgCloseConnection is a request message to close a connection.
 	msgCloseConnection
 
+	// msgCloseConnectionReply is a request message to close a connection.
+	msgCloseConnectionReply
+
 	// msgSendPing is a request message to send a ping.
 	msgSendPing
 
@@ -101,6 +106,8 @@ func (t messageType) String() string {
 		return "msgOpenConnectionReply"
 	case msgCloseConnection:
 		return "msgCloseConnection"
+	case msgCloseConnectionReply:
+		return "msgCloseConnectionReply"
 	case msgSendPing:
 		return "msgSendPing"
 	case msgPingReply:
@@ -152,6 +159,8 @@ func ReadMessage(r io.ByteReader) (msg Message, err error) {
 		msg = raw.asOpenConnectionReply()
 	case msgCloseConnection:
 		msg = raw.asCloseConnection()
+	case msgCloseConnectionReply:
+		msg = raw.asCloseConnectionReply()
 	case msgSendPing:
 		msg = raw.asSendPing()
 	case msgPingReply:
@@ -465,6 +474,25 @@ func (c CloseConnection) WriteTo(w io.Writer) (int64, error) {
 func (m RawMessage) asCloseConnection() (msg CloseConnection) {
 	m.checkType(msgCloseConnection)
 	m.checkNArgs(1)
+	msg.ID = m.argConnectionID(0)
+	return msg
+}
+
+// CloseConnectionReply is a response to a close message request.
+type CloseConnectionReply struct {
+	ID ConnectionID
+}
+
+func (c CloseConnectionReply) WriteTo(w io.Writer) (int64, error) {
+	raw := RawMessage{
+		Type: msgCloseConnectionReply,
+		Args: [][]byte{c.ID.encode()},
+	}
+	return raw.WriteTo(w)
+}
+
+func (m RawMessage) asCloseConnectionReply() (msg CloseConnectionReply) {
+	m.checkType(msgCloseConnectionReply)
 	msg.ID = m.argConnectionID(0)
 	return msg
 }

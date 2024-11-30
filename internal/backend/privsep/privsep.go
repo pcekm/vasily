@@ -79,15 +79,17 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
+
+	"github.com/pcekm/graphping/internal/backend/privsep/client"
 )
 
 const (
 	startPrivFlag = "[privileged]"
 )
 
-func Initialize() *Client {
+func Initialize() (*client.Client, *exec.Cmd) {
 	if len(os.Args) == 2 && os.Args[1] == startPrivFlag {
-		log.Printf("Starting privserver")
+		log.Printf("Starting privileged server.")
 		server := newServer()
 		server.run()
 		os.Exit(0)
@@ -118,7 +120,7 @@ func Initialize() *Client {
 		log.Fatalf("Error running privileged server: %v", err)
 	}
 
-	return newClient(cmd, clientIn, clientOut)
+	return client.New(clientIn, clientOut), cmd
 }
 
 func dropPrivileges() error {

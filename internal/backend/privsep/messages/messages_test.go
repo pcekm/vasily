@@ -1,4 +1,4 @@
-package privsep
+package messages
 
 import (
 	"bytes"
@@ -100,6 +100,11 @@ func TestReadMessage(t *testing.T) {
 				Addr: net.ParseIP("192.0.2.1"),
 				TTL:  11,
 			},
+		},
+		{
+			Name:    "CloseConnectionReply",
+			Encoded: []byte{byte(msgCloseConnectionReply), 1, 4, 0xde, 0xad, 0xbe, 0xef},
+			Want:    CloseConnectionReply{ID: 0xdeadbeef},
 		},
 		{
 			Name:    "SendPing/MissingArgs",

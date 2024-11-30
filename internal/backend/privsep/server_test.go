@@ -11,11 +11,12 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pcekm/graphping/internal/backend"
+	"github.com/pcekm/graphping/internal/backend/privsep/messages"
 )
 
 type serverHarness struct {
 	t       *testing.T
-	srv     *privServer
+	srv     *Server
 	srvDone chan any
 	out     io.WriteCloser
 	in      io.ReadCloser
@@ -81,14 +82,14 @@ func (h *serverHarness) Close() {
 	}
 }
 
-func (h *serverHarness) Write(msg Message) {
+func (h *serverHarness) Write(msg messages.Message) {
 	if _, err := msg.WriteTo(h.out); err != nil {
 		h.t.Errorf("Error sending message: %v", err)
 	}
 }
 
-func (h *serverHarness) Read() Message {
-	msg, err := ReadMessage(h.inb)
+func (h *serverHarness) Read() messages.Message {
+	msg, err := messages.ReadMessage(h.inb)
 	if err != nil {
 		h.t.Errorf("Error reading message: %v", err)
 	}
@@ -113,7 +114,7 @@ func TestShutdown(t *testing.T) {
 		exitcode = &x
 	}
 	go func() {
-		h.Write(Shutdown{})
+		h.Write(messages.Shutdown{})
 		h.DoneWriting()
 	}()
 
@@ -135,7 +136,7 @@ func TestPrivilegeDrop_SmokeTest(t *testing.T) {
 	defer h.Close()
 
 	go func() {
-		h.Write(PrivilegeDrop{})
+		h.Write(messages.PrivilegeDrop{})
 		h.DoneWriting()
 	}()
 	h.Run()
@@ -149,23 +150,23 @@ func TestPingLoopback(t *testing.T) {
 	}
 
 	cases := []struct {
-		Ver  IPVersion
+		Ver  messages.IPVersion
 		Addr net.IP
 	}{
-		{Ver: IPv4, Addr: net.ParseIP("127.0.0.1")},
-		{Ver: IPv6, Addr: net.ParseIP("::1")},
+		{Ver: messages.IPv4, Addr: net.ParseIP("127.0.0.1")},
+		{Ver: messages.IPv6, Addr: net.ParseIP("::1")},
 	}
 	for _, c := range cases {
 		t.Run(c.Ver.String(), func(t *testing.T) {
 			h := newServerHarness(t)
 			defer h.Close()
 
-			var id ConnectionID
+			var id messages.ConnectionID
 			go func() {
 				defer h.DoneWriting()
-				h.Write(OpenConnection{IPVer: c.Ver})
+				h.Write(messages.OpenConnection{IPVer: c.Ver})
 				msg := h.Read()
-				ocr, ok := msg.(OpenConnectionReply)
+				ocr, ok := msg.(messages.OpenConnectionReply)
 				if !ok {
 					t.Errorf("Expected OpenConnectionReply, got: %#v", msg)
 					return
@@ -176,20 +177,20 @@ func TestPingLoopback(t *testing.T) {
 					return
 				}
 
-				h.Write(SendPing{
+				h.Write(messages.SendPing{
 					ID:     id,
 					Packet: backend.Packet{Seq: 1, Payload: []byte("8675309")},
 					Addr:   c.Addr,
 				})
 
 				msg = h.Read()
-				pingRepl, ok := msg.(PingReply)
+				pingRepl, ok := msg.(messages.PingReply)
 				if !ok {
 					t.Errorf("Expected PingReply, got %#v", msg)
 					return
 				}
 
-				want := PingReply{
+				want := messages.PingReply{
 					ID:     id,
 					Packet: backend.Packet{Type: backend.PacketReply, Seq: 1, Payload: []byte("8675309")},
 					Peer:   c.Addr,
@@ -198,7 +199,7 @@ func TestPingLoopback(t *testing.T) {
 					t.Errorf("Wrong ping reply (-want, +got):\n%v", diff)
 				}
 
-				h.Write(CloseConnection{ID: id})
+				h.Write(messages.CloseConnection{ID: id})
 			}()
 
 			h.Run()

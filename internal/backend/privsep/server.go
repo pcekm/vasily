@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/pcekm/graphping/internal/backend/icmp"
+	"github.com/pcekm/graphping/internal/backend/privsep/messages"
 )
 
 type connMaker func() *icmp.PingConn
@@ -41,12 +42,12 @@ func defaultNewIPv6Conn() *icmp.PingConn {
 }
 
 // Handles messages from [privClient] and issues replies.
-type privServer struct {
+type Server struct {
 	newIPv4 connMaker
 	newIPv6 connMaker
 	osExit  func(int) // For test injection
-	conns   map[ConnectionID]*icmp.PingConn
-	nextId  ConnectionID
+	conns   map[messages.ConnectionID]*icmp.PingConn
+	nextId  messages.ConnectionID
 
 	in *os.File
 
@@ -54,22 +55,22 @@ type privServer struct {
 	out *os.File
 }
 
-func newServer() *privServer {
-	return &privServer{
+func newServer() *Server {
+	return &Server{
 		in:      os.Stdin,
 		out:     os.Stdout,
 		newIPv4: defaultNewIPv4Conn,
 		newIPv6: defaultNewIPv6Conn,
 		osExit:  os.Exit,
-		conns:   make(map[ConnectionID]*icmp.PingConn),
+		conns:   make(map[messages.ConnectionID]*icmp.PingConn),
 	}
 }
 
 // Runs the server and blocks forever.
-func (s *privServer) run() {
+func (s *Server) run() {
 	r := bufio.NewReader(s.in)
 	for {
-		msg, err := ReadMessage(r)
+		msg, err := messages.ReadMessage(r)
 		if errors.Is(err, io.EOF) {
 			return
 		}
@@ -81,7 +82,7 @@ func (s *privServer) run() {
 }
 
 // Reads from connection in a loop. Exits when the connection is closed.
-func (s *privServer) readLoop(id ConnectionID) {
+func (s *Server) readLoop(id messages.ConnectionID) {
 	conn := s.connFor(id)
 	for {
 		pkt, peer, err := conn.ReadFrom()
@@ -95,7 +96,7 @@ func (s *privServer) readLoop(id ConnectionID) {
 			}
 			log.Panicf("Error reading from connection: %v", err)
 		}
-		msg := PingReply{
+		msg := messages.PingReply{
 			ID:     id,
 			Packet: *pkt,
 			Peer:   peer.(*net.UDPAddr).IP,
@@ -106,7 +107,7 @@ func (s *privServer) readLoop(id ConnectionID) {
 
 // Closes the server. This is meant for tests, and therefore doesn't exit the
 // process.
-func (s *privServer) Close() error {
+func (s *Server) Close() error {
 	var errs []error
 	for _, conn := range s.conns {
 		err := conn.Close()
@@ -123,7 +124,7 @@ func (s *privServer) Close() error {
 	return errors.Join(errs...)
 }
 
-func (s *privServer) connFor(id ConnectionID) *icmp.PingConn {
+func (s *Server) connFor(id messages.ConnectionID) *icmp.PingConn {
 	conn, ok := s.conns[id]
 	if !ok {
 		log.Panicf("No ICMP connection for %d", id)
@@ -132,7 +133,7 @@ func (s *privServer) connFor(id ConnectionID) *icmp.PingConn {
 }
 
 // Writes a message to the client. Panics on error.
-func (s *privServer) write(msg Message) {
+func (s *Server) write(msg messages.Message) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, err := msg.WriteTo(s.out)
@@ -141,43 +142,43 @@ func (s *privServer) write(msg Message) {
 	}
 }
 
-func (s *privServer) handleMessage(msg Message) {
+func (s *Server) handleMessage(msg messages.Message) {
 	switch msg := msg.(type) {
-	case Shutdown:
+	case messages.Shutdown:
 		s.handleShutdown(msg)
-	case PrivilegeDrop:
+	case messages.PrivilegeDrop:
 		s.handlePrivilegeDrop(msg)
-	case OpenConnection:
+	case messages.OpenConnection:
 		s.handleOpenConnection(msg)
-	case OpenConnectionReply:
+	case messages.OpenConnectionReply:
 		s.handleOpenConnectionReply(msg)
-	case CloseConnection:
+	case messages.CloseConnection:
 		s.handleCloseConnection(msg)
-	case SendPing:
+	case messages.SendPing:
 		s.handleSendPing(msg)
-	case PingReply:
+	case messages.PingReply:
 		s.handlePingReply(msg)
 	default:
 		log.Panicf("Invalid message: %v", msg)
 	}
 }
 
-func (s *privServer) handleShutdown(Shutdown) {
+func (s *Server) handleShutdown(messages.Shutdown) {
 	s.osExit(0)
 }
 
-func (s *privServer) handlePrivilegeDrop(PrivilegeDrop) {
+func (s *Server) handlePrivilegeDrop(messages.PrivilegeDrop) {
 	if err := dropPrivileges(); err != nil {
 		log.Panicf("Failed to drop privileges: %v", err)
 	}
 }
 
-func (s *privServer) handleOpenConnection(msg OpenConnection) {
+func (s *Server) handleOpenConnection(msg messages.OpenConnection) {
 	var conn *icmp.PingConn
 	switch msg.IPVer {
-	case IPv4:
+	case messages.IPv4:
 		conn = s.newIPv4()
-	case IPv6:
+	case messages.IPv6:
 		conn = s.newIPv6()
 	default:
 		log.Panicf("Unknown IP version: %v", msg.IPVer)
@@ -186,16 +187,16 @@ func (s *privServer) handleOpenConnection(msg OpenConnection) {
 	s.nextId++
 	s.conns[id] = conn
 	go s.readLoop(id)
-	s.write(OpenConnectionReply{
+	s.write(messages.OpenConnectionReply{
 		ID: id,
 	})
 }
 
-func (s *privServer) handleOpenConnectionReply(msg OpenConnectionReply) {
+func (s *Server) handleOpenConnectionReply(msg messages.OpenConnectionReply) {
 	log.Panicf("Unexpected message: %v", msg)
 }
 
-func (s *privServer) handleCloseConnection(msg CloseConnection) {
+func (s *Server) handleCloseConnection(msg messages.CloseConnection) {
 	conn := s.connFor(msg.ID)
 	if err := conn.Close(); err != nil {
 		log.Panicf("Error closing connection: %v", err)
@@ -203,13 +204,13 @@ func (s *privServer) handleCloseConnection(msg CloseConnection) {
 	delete(s.conns, msg.ID)
 }
 
-func (s *privServer) handleSendPing(msg SendPing) {
+func (s *Server) handleSendPing(msg messages.SendPing) {
 	conn := s.connFor(msg.ID)
 	if err := conn.WriteTo(&msg.Packet, &net.UDPAddr{IP: msg.Addr}); err != nil {
 		log.Panicf("Error sending ping: %v", err)
 	}
 }
 
-func (s *privServer) handlePingReply(msg PingReply) {
+func (s *Server) handlePingReply(msg messages.PingReply) {
 	log.Panicf("Unexpected message: %v", msg)
 }
