@@ -13,6 +13,7 @@ import (
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/backend/icmp"
 	"github.com/pcekm/graphping/internal/backend/privsep"
+	"github.com/pcekm/graphping/internal/backend/privsep/messages"
 	"github.com/pcekm/graphping/internal/lookup"
 	"github.com/pcekm/graphping/internal/tui"
 )
@@ -36,6 +37,13 @@ func main() {
 		srvCmd.Process.Kill()
 		srvCmd.Wait()
 	}()
+
+	newV4Conn := func() (backend.Conn, error) {
+		return privClient.NewConn(messages.IPv4)
+	}
+	newV6Conn := func() (backend.Conn, error) {
+		return privClient.NewConn(messages.IPv6)
+	}
 
 	pflag.Parse()
 

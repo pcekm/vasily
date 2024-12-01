@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/backend/icmp"
 	"github.com/pcekm/graphping/internal/backend/privsep/messages"
 )
@@ -207,7 +208,11 @@ func (s *Server) handleCloseConnection(msg messages.CloseConnection) {
 
 func (s *Server) handleSendPing(msg messages.SendPing) {
 	conn := s.connFor(msg.ID)
-	if err := conn.WriteTo(&msg.Packet, &net.UDPAddr{IP: msg.Addr}); err != nil {
+	var opts []backend.WriteOption
+	if msg.TTL != 0 {
+		opts = append(opts, backend.TTLOption{TTL: msg.TTL})
+	}
+	if err := conn.WriteTo(&msg.Packet, &net.UDPAddr{IP: msg.Addr}, opts...); err != nil {
 		log.Panicf("Error sending ping: %v", err)
 	}
 }

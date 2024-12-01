@@ -129,7 +129,7 @@ func TestShutdown(t *testing.T) {
 // they emit smoke. :-) Testing them properly will require an integration test
 // in a VM. (Dependency injection is another idea, but the added complication
 // gives me pause. Ideally this code should be extremely easy to visually
-// inspect, and indirection would obscure things.)
+// inspect, and indirection could obscure things.)
 
 func TestPrivilegeDrop_SmokeTest(t *testing.T) {
 	h := newServerHarness(t)

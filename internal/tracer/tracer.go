@@ -3,9 +3,9 @@ package tracer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
-	"strings"
 	"time"
 
 	"github.com/pcekm/graphping/internal/backend"
@@ -51,7 +51,7 @@ func TraceRoute(newConn backend.NewConn, dest net.Addr, res chan<- Step) error {
 			pkt.Seq++
 			recvPkt, peer, err := readSeq(conn, pkt.Seq-1)
 			if err != nil {
-				if strings.HasSuffix(err.Error(), "timeout") {
+				if errors.Is(err, context.DeadlineExceeded) {
 					continue
 				}
 				return fmt.Errorf("read error: %v", err)
