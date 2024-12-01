@@ -22,7 +22,6 @@ func traceExchange(seq, ttl int, dest net.Addr) *test.PingExchangeOpts {
 	opts.TTL = ttl
 	opts.RecvPkt.Type = backend.PacketTimeExceeded
 	opts.Peer = hopAddr(ttl)
-	opts.ReadDeadline = time.Now().Add(time.Second)
 	return opts
 }
 

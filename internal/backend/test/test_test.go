@@ -1,6 +1,7 @@
 package test
 
 import (
+	context "context"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -9,7 +10,7 @@ import (
 )
 
 func TestMockPingExchange(t *testing.T) {
-	ctrl := gomock.NewController(t)
+	ctrl, ctx := gomock.WithContext(context.Background(), t)
 	conn := NewMockConn(ctrl)
 
 	payload := []byte("the payload")
@@ -19,7 +20,7 @@ func TestMockPingExchange(t *testing.T) {
 	if err := conn.WriteTo(sentPkt, LoopbackV4); err != nil {
 		t.Errorf("WriteTo error: %v", err)
 	}
-	gotPkt, peer, err := conn.ReadFrom()
+	gotPkt, peer, err := conn.ReadFrom(ctx)
 	if err != nil {
 		t.Errorf("ReadFrom error: %v", err)
 	}
@@ -36,7 +37,7 @@ func TestMockPingExchange(t *testing.T) {
 
 func BenchmarkPingExchange_Overall(b *testing.B) {
 	b.StopTimer()
-	ctrl := gomock.NewController(b)
+	ctrl, ctx := gomock.WithContext(context.Background(), b)
 	conn := NewMockConn(ctrl)
 	for i := range b.N {
 		conn.MockPingExchange(NewPingExchange(i))
@@ -48,7 +49,7 @@ func BenchmarkPingExchange_Overall(b *testing.B) {
 		if err := conn.WriteTo(&sentPkt, LoopbackV4); err != nil {
 			b.Errorf("WriteTo error: %v", err)
 		}
-		_, _, err := conn.ReadFrom()
+		_, _, err := conn.ReadFrom(ctx)
 		if err != nil {
 			b.Errorf("ReadFrom error: %v", err)
 		}
@@ -58,7 +59,7 @@ func BenchmarkPingExchange_Overall(b *testing.B) {
 
 func BenchmarkPingExchange_WriteTo(b *testing.B) {
 	b.StopTimer()
-	ctrl := gomock.NewController(b)
+	ctrl, ctx := gomock.WithContext(context.Background(), b)
 	conn := NewMockConn(ctrl)
 	for i := range b.N {
 		conn.MockPingExchange(NewPingExchange(i))
@@ -71,7 +72,7 @@ func BenchmarkPingExchange_WriteTo(b *testing.B) {
 			b.StopTimer()
 			b.Errorf("WriteTo error: %v", err)
 		}
-		_, _, err := conn.ReadFrom()
+		_, _, err := conn.ReadFrom(ctx)
 		if err != nil {
 			b.Errorf("ReadFrom error: %v", err)
 		}
@@ -81,7 +82,7 @@ func BenchmarkPingExchange_WriteTo(b *testing.B) {
 
 func BenchmarkPingExchange_ReadFrom(b *testing.B) {
 	b.StopTimer()
-	ctrl := gomock.NewController(b)
+	ctrl, ctx := gomock.WithContext(context.Background(), b)
 	conn := NewMockConn(ctrl)
 	for i := range b.N {
 		conn.MockPingExchange(NewPingExchange(i))
@@ -93,7 +94,7 @@ func BenchmarkPingExchange_ReadFrom(b *testing.B) {
 			b.Errorf("WriteTo error: %v", err)
 		}
 		b.StartTimer()
-		_, _, err := conn.ReadFrom()
+		_, _, err := conn.ReadFrom(ctx)
 		b.StopTimer()
 		if err != nil {
 			b.Errorf("ReadFrom error: %v", err)

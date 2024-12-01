@@ -1,10 +1,9 @@
 package client
 
 import (
-	"errors"
+	"context"
 	"log"
 	"net"
-	"time"
 
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/backend/privsep/messages"
@@ -42,24 +41,13 @@ func (c *Connection) WriteTo(pkt *backend.Packet, dest net.Addr, opts ...backend
 }
 
 // ReadFrom reads the next available ping reply.
-func (c *Connection) ReadFrom() (pkt *backend.Packet, peer net.Addr, err error) {
-	msg := <-c.readFrom
-	return &msg.Packet, &net.UDPAddr{IP: msg.Peer}, nil
-}
-
-// SetDeadline sets the read and write deadlines for this connection.
-func (c *Connection) SetDeadline(time.Time) error {
-	return errors.New("not implemented")
-}
-
-// SetReadDeadline sets the read deadline for this connection.
-func (c *Connection) SetReadDeadline(time.Time) error {
-	return errors.New("not implemented")
-}
-
-// SetWriteDeadline sets the write deadline for this connection.
-func (c *Connection) SetWriteDeadline(time.Time) error {
-	return errors.New("not implemented")
+func (c *Connection) ReadFrom(ctx context.Context) (pkt *backend.Packet, peer net.Addr, err error) {
+	select {
+	case msg := <-c.readFrom:
+		return &msg.Packet, &net.UDPAddr{IP: msg.Peer}, nil
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	}
 }
 
 // Closes the connection.

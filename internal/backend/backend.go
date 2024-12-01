@@ -4,9 +4,9 @@
 package backend
 
 import (
+	"context"
 	"fmt"
 	"net"
-	"time"
 )
 
 // PacketType is a type of ICMP packet.
@@ -69,16 +69,7 @@ type Conn interface {
 	WriteTo(pkt *Packet, dest net.Addr, opts ...WriteOption) error
 
 	// ReadFrom reads the next available ping reply.
-	ReadFrom() (pkt *Packet, peer net.Addr, err error)
-
-	// SetDeadline sets the read and write deadlines for this connection.
-	SetDeadline(time.Time) error
-
-	// SetReadDeadline sets the read deadline for this connection.
-	SetReadDeadline(time.Time) error
-
-	// SetWriteDeadline sets the write deadline for this connection.
-	SetWriteDeadline(time.Time) error
+	ReadFrom(ctx context.Context) (pkt *Packet, peer net.Addr, err error)
 
 	// Close closes the connection. As is standard with network connections in
 	// Go, any blocked read or write operations will be unblocked and return

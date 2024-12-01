@@ -2,6 +2,7 @@ package client
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"io"
 	"log"
@@ -118,6 +119,8 @@ func TestClientOpenClose(t *testing.T) {
 }
 
 func TestReadFrom(t *testing.T) {
+	ctx, done := context.WithTimeout(context.Background(), 5*time.Second)
+	defer done()
 	sent := messages.PingReply{
 		ID: 1234,
 		Packet: backend.Packet{
@@ -155,7 +158,7 @@ func TestReadFrom(t *testing.T) {
 		t.Errorf("WriteTo error: %v", err)
 	}
 
-	pkt, peer, err := conn.ReadFrom()
+	pkt, peer, err := conn.ReadFrom(ctx)
 	if err != nil {
 		t.Errorf("ReadFrom error: %v", err)
 	}

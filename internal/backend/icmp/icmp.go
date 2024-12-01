@@ -2,6 +2,7 @@
 package icmp
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
@@ -30,12 +31,13 @@ type PingConn struct {
 	icmpType icmp.Type
 	pingID   int
 
-	mu sync.RWMutex
 	// Write operations are locked so that TTL can be set and reset atomically.
 	// Uses write locks for custom TTLs, and read locks for sends on the default
 	// TTL. This allows concurrent writes for the more common case, and only
 	// fully locks to set the TTL, write, and reset the TTL atomically.
-	conn *icmp.PacketConn
+	ttlMu  sync.RWMutex
+	readMu sync.Mutex
+	conn   *icmp.PacketConn
 }
 
 // New creates a new ICMP ping connection. The network arg should be:
@@ -90,21 +92,6 @@ func (p *PingConn) Close() error {
 	return p.conn.Close()
 }
 
-// SetDeadline sets the read and write deadlines.
-func (p *PingConn) SetDeadline(t time.Time) error {
-	return p.conn.SetDeadline(t)
-}
-
-// SetReadDeadline sets the read deadline.
-func (p *PingConn) SetReadDeadline(t time.Time) error {
-	return p.conn.SetReadDeadline(t)
-}
-
-// SetWriteDeadline sets the write deadline.
-func (p *PingConn) SetWriteDeadline(t time.Time) error {
-	return p.conn.SetWriteDeadline(t)
-}
-
 // Sets the time to live of sent packets.
 func (p *PingConn) setTTL(ttl int) error {
 	switch p.protoNum {
@@ -149,15 +136,15 @@ func (p *PingConn) WriteTo(pkt *backend.Packet, dest net.Addr, opts ...backend.W
 }
 
 func (p *PingConn) writeToNormal(pkt *backend.Packet, dest net.Addr) error {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+	p.ttlMu.RLock()
+	defer p.ttlMu.RUnlock()
 	return p.baseWriteTo(pkt, dest)
 }
 
 // writeToTTL sends an ICMP echo request with a given time to live.
 func (p *PingConn) writeToTTL(pkt *backend.Packet, dest net.Addr, ttl int) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.ttlMu.Lock()
+	defer p.ttlMu.Unlock()
 	origTTL, err := p.ttl()
 	if err != nil {
 		return fmt.Errorf("unable to get current ttl: %v", err)
@@ -200,9 +187,16 @@ func (p *PingConn) baseWriteTo(pkt *backend.Packet, dest net.Addr) error {
 }
 
 // Reads an ICMP echo response.
-func (p *PingConn) ReadFrom() (*backend.Packet, net.Addr, error) {
+func (p *PingConn) ReadFrom(ctx context.Context) (*backend.Packet, net.Addr, error) {
 	buf := make([]byte, maxMTU)
 	for {
+		if dl, ok := ctx.Deadline(); ok {
+			if err := p.conn.SetReadDeadline(dl); err != nil {
+				return nil, nil, err
+			}
+		} else if err := p.conn.SetReadDeadline(time.Time{}); err != nil {
+			return nil, nil, err
+		}
 		n, peer, err := p.conn.ReadFrom(buf)
 		if err != nil {
 			return nil, peer, fmt.Errorf("connection read error: %v", err)

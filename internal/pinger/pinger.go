@@ -3,6 +3,7 @@ package pinger
 
 import (
 	"container/list"
+	"context"
 	"fmt"
 	"iter"
 	"log"
@@ -353,7 +354,7 @@ func (p *Pinger) sendPing(seq int) (int, error) {
 // closed.
 func (p *Pinger) receiveLoop(received chan<- readResult) {
 	for {
-		pkt, peer, err := p.conn.ReadFrom()
+		pkt, peer, err := p.conn.ReadFrom(context.TODO())
 		if err != nil {
 			log.Printf("ReadFrom error: %v", err)
 			return

@@ -2,6 +2,7 @@
 package test
 
 import (
+	context "context"
 	"errors"
 	"net"
 	"time"
@@ -45,9 +46,6 @@ type PingExchangeOpts struct {
 
 	// Peer is address the response will come from.
 	Peer net.Addr
-
-	// ReadDeadline is the receive deadline set.
-	ReadDeadline time.Time
 
 	// RecvErr is the error to return from the reply operation.
 	RecvErr error
@@ -125,23 +123,11 @@ func (c *MockConn) MockPingExchange(opt *PingExchangeOpts) {
 	}
 
 	if !opt.NoReply {
-		if !opt.ReadDeadline.IsZero() {
-			c.EXPECT().
-				SetReadDeadline(gomock.Cond(func(got time.Time) bool {
-					delta := got.Unix() - opt.ReadDeadline.Unix()
-					if delta < 0 {
-						delta = -delta
-					}
-					return delta < 1
-				})).
-				Times(1).
-				Return(nil)
-		}
 		recvPkt := opt.RecvPkt
 		c.EXPECT().
-			ReadFrom().
+			ReadFrom(gomock.Not(gomock.Nil())).
 			Times(1).
-			Do(func() {
+			Do(func(context.Context) {
 				<-pingSent
 			}).
 			Return(&recvPkt, opt.Peer, opt.RecvErr)
@@ -158,9 +144,9 @@ func (c *MockConn) MockClose() {
 		Do(func() { close(closed) }).
 		Return(nil)
 	c.EXPECT().
-		ReadFrom().
+		ReadFrom(gomock.Not(gomock.Nil())).
 		AnyTimes().
-		Do(func() {
+		Do(func(context.Context) {
 			<-closed
 		}).
 		Return(nil, nil, errors.New("mock closed"))

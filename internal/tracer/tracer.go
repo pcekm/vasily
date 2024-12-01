@@ -2,6 +2,7 @@
 package tracer
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
@@ -69,9 +70,10 @@ func TraceRoute(newConn backend.NewConn, dest net.Addr, res chan<- Step) error {
 }
 
 func readSeq(conn backend.Conn, seq int) (*backend.Packet, net.Addr, error) {
-	conn.SetReadDeadline(time.Now().Add(timeout))
+	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
+	defer cancel()
 	for {
-		pkt, peer, err := conn.ReadFrom()
+		pkt, peer, err := conn.ReadFrom(ctx)
 		if pkt != nil && (pkt.Seq != seq || pkt.Type == backend.PacketRequest) {
 			continue
 		}

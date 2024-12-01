@@ -2,6 +2,7 @@ package privsep
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"io"
 	"log"
@@ -85,7 +86,7 @@ func (s *Server) run() {
 func (s *Server) readLoop(id messages.ConnectionID) {
 	conn := s.connFor(id)
 	for {
-		pkt, peer, err := conn.ReadFrom()
+		pkt, peer, err := conn.ReadFrom(context.TODO())
 		if err != nil {
 			// This is less than ideal. It would be nice if the error was a
 			// net.ErrClosed, but it isn't. So we have to check the error

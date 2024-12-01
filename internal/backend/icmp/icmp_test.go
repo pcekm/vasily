@@ -1,6 +1,7 @@
 package icmp
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"testing"
@@ -41,13 +42,11 @@ func TestPingConnection(t *testing.T) {
 	for _, c := range cases {
 		name := fmt.Sprintf("%s/%s/%d", c.dest.IP.String(), c.listenAddr, c.ttl)
 		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
 			conn, err := New(c.network, c.listenAddr)
 			if err != nil {
 				t.Fatalf("Error opening connection: %v", err)
-			}
-
-			if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
-				t.Errorf("Error setting deadline: %v", err)
 			}
 
 			for seq := 0; seq < 10; seq++ {
@@ -64,7 +63,7 @@ func TestPingConnection(t *testing.T) {
 					t.Fatalf("WriteTo error: %v", err)
 				}
 
-				gotPkt, gotPeer, err := conn.ReadFrom()
+				gotPkt, gotPeer, err := conn.ReadFrom(ctx)
 				if err != nil {
 					t.Errorf("ReadFrom error: %v", err)
 				}
