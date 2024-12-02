@@ -199,6 +199,9 @@ func (p *PingConn) ReadFrom(ctx context.Context) (*backend.Packet, net.Addr, err
 		}
 		n, peer, err := p.conn.ReadFrom(buf)
 		if err != nil {
+			if strings.HasSuffix(err.Error(), "timeout") {
+				return nil, peer, backend.ErrTimeout
+			}
 			return nil, peer, fmt.Errorf("connection read error: %v", err)
 		}
 

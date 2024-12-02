@@ -5,9 +5,13 @@ package backend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 )
+
+// ErrTimeout indicates that an operation reached its timeout or deadline.
+var ErrTimeout = errors.New("timeout")
 
 // PacketType is a type of ICMP packet.
 type PacketType int

@@ -51,7 +51,7 @@ func TraceRoute(newConn backend.NewConn, dest net.Addr, res chan<- Step) error {
 			pkt.Seq++
 			recvPkt, peer, err := readSeq(conn, pkt.Seq-1)
 			if err != nil {
-				if errors.Is(err, context.DeadlineExceeded) {
+				if errors.Is(err, backend.ErrTimeout) {
 					continue
 				}
 				return fmt.Errorf("read error: %v", err)

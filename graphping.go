@@ -13,7 +13,6 @@ import (
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/backend/icmp"
 	"github.com/pcekm/graphping/internal/backend/privsep"
-	"github.com/pcekm/graphping/internal/backend/privsep/messages"
 	"github.com/pcekm/graphping/internal/lookup"
 	"github.com/pcekm/graphping/internal/tui"
 )
@@ -31,19 +30,8 @@ func init() {
 }
 
 func main() {
-	privClient, srvCmd := privsep.Initialize()
-	defer func() {
-		privClient.Close()
-		srvCmd.Process.Kill()
-		srvCmd.Wait()
-	}()
-
-	newV4Conn := func() (backend.Conn, error) {
-		return privClient.NewConn(messages.IPv4)
-	}
-	newV6Conn := func() (backend.Conn, error) {
-		return privClient.NewConn(messages.IPv6)
-	}
+	privsepCleanup := privsep.Initialize()
+	defer privsepCleanup()
 
 	pflag.Parse()
 
@@ -72,7 +60,6 @@ func main() {
 	prog.Run()
 }
 
-// TODO: privileged ping support.
 func newV4Conn() (backend.Conn, error) {
 	return icmp.New("udp4", *listenAddr)
 }

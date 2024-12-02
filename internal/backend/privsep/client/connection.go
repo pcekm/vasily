@@ -46,7 +46,7 @@ func (c *Connection) ReadFrom(ctx context.Context) (pkt *backend.Packet, peer ne
 	case msg := <-c.readFrom:
 		return &msg.Packet, &net.UDPAddr{IP: msg.Peer}, nil
 	case <-ctx.Done():
-		return nil, nil, ctx.Err()
+		return nil, nil, backend.ErrTimeout
 	}
 }
 

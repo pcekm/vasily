@@ -78,6 +78,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"runtime"
 	"syscall"
 
 	"github.com/pcekm/graphping/internal/backend/privsep/client"
@@ -87,7 +88,11 @@ const (
 	startPrivFlag = "[privileged]"
 )
 
-func Initialize() (*client.Client, *exec.Cmd) {
+func Initialize() func() {
+	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
+		return func() {}
+	}
+
 	if len(os.Args) == 2 && os.Args[1] == startPrivFlag {
 		log.Printf("Starting privileged server.")
 		server := newServer()
@@ -120,7 +125,24 @@ func Initialize() (*client.Client, *exec.Cmd) {
 		log.Fatalf("Error running privileged server: %v", err)
 	}
 
-	return client.New(clientIn, clientOut), cmd
+	privsepClient := client.New(clientIn, clientOut)
+
+	return shutdownFunc(cmd, privsepClient)
+}
+
+func shutdownFunc(cmd *exec.Cmd, privsepClient *client.Client) func() {
+	return func() {
+		log.Print("Shutting down privsep.")
+		if err := privsepClient.Close(); err != nil {
+			log.Printf("Error closing privsep client: %v", err)
+		}
+		if err := cmd.Process.Kill(); err != nil {
+			log.Printf("Error killing privsep process: %v", err)
+		}
+		if err := cmd.Wait(); err != nil {
+			log.Printf("Error waiting for privsep: %v", err)
+		}
+	}
 }
 
 func dropPrivileges() error {

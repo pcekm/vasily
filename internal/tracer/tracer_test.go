@@ -134,13 +134,13 @@ func TestTraceRouteDroppedPacket(t *testing.T) {
 
 	// Three retries for dropped packet:
 	opts = traceExchange(1, 2, dest)
-	opts.RecvErr = test.ErrTimeout
+	opts.RecvErr = backend.ErrTimeout
 	conn.MockPingExchange(opts)
 	opts = traceExchange(2, 2, dest)
-	opts.RecvErr = test.ErrTimeout
+	opts.RecvErr = backend.ErrTimeout
 	conn.MockPingExchange(opts)
 	opts = traceExchange(3, 2, dest)
-	opts.RecvErr = test.ErrTimeout
+	opts.RecvErr = backend.ErrTimeout
 	conn.MockPingExchange(opts)
 
 	opts = traceExchange(4, 3, dest)

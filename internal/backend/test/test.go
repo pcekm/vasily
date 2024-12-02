@@ -18,11 +18,6 @@ var (
 
 	// LoopbackV6 is the IPv6 loopback address.
 	LoopbackV6 = &net.UDPAddr{IP: net.ParseIP("::1")}
-
-	// ErrTimeout is a timeout error similar to the one returned by the ICMP
-	// library. That timeout is, unfortunately, just one with a string ending
-	// with "timeout," without any other way to distinguish it.
-	ErrTimeout = errors.New("mock timeout")
 )
 
 // PingExchangeOpts holds various parameters for a send/receive exchange of
