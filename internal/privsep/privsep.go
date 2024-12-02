@@ -81,7 +81,7 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/pcekm/graphping/internal/backend/privsep/client"
+	"github.com/pcekm/graphping/internal/privsep/client"
 )
 
 const (

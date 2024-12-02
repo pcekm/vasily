@@ -9,7 +9,7 @@ import (
 	"log"
 	"sync"
 
-	"github.com/pcekm/graphping/internal/backend/privsep/messages"
+	"github.com/pcekm/graphping/internal/privsep/messages"
 )
 
 // Client is the client for the privsep server.

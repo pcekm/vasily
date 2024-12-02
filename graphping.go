@@ -12,8 +12,8 @@ import (
 
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/backend/icmp"
-	"github.com/pcekm/graphping/internal/backend/privsep"
 	"github.com/pcekm/graphping/internal/lookup"
+	"github.com/pcekm/graphping/internal/privsep"
 	"github.com/pcekm/graphping/internal/tui"
 )
 

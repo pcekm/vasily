@@ -6,7 +6,7 @@ import (
 	"net"
 
 	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/backend/privsep/messages"
+	"github.com/pcekm/graphping/internal/privsep/messages"
 )
 
 // Connection is a single ping connection.

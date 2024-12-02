@@ -13,8 +13,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/backend/privsep/messages"
 	"github.com/pcekm/graphping/internal/backend/test"
+	"github.com/pcekm/graphping/internal/privsep/messages"
 )
 
 type messageHandler func(messages.Message) messages.Message

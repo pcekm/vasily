@@ -14,7 +14,7 @@ import (
 
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/backend/icmp"
-	"github.com/pcekm/graphping/internal/backend/privsep/messages"
+	"github.com/pcekm/graphping/internal/privsep/messages"
 )
 
 type connMaker func() *icmp.PingConn
