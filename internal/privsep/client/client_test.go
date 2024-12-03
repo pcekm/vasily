@@ -15,6 +15,7 @@ import (
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/backend/test"
 	"github.com/pcekm/graphping/internal/privsep/messages"
+	"github.com/pcekm/graphping/internal/util"
 )
 
 type messageHandler func(messages.Message) messages.Message
@@ -101,7 +102,7 @@ func TestClientOpenClose(t *testing.T) {
 	client, server := makeCSPair(t, handler)
 	go server.Run()
 
-	conn, err := client.NewConn(messages.IPv6)
+	conn, err := client.NewConn(util.IPv6)
 	if err != nil {
 		t.Fatalf("NewConn error: %v", err)
 	}
@@ -149,7 +150,7 @@ func TestReadFrom(t *testing.T) {
 	client, server := makeCSPair(t, handler)
 	go server.Run()
 
-	conn, err := client.NewConn(messages.IPv4)
+	conn, err := client.NewConn(util.IPv4)
 	if err != nil {
 		t.Errorf("NewConn error: %v", err)
 	}
@@ -199,7 +200,7 @@ func TestWriteTo(t *testing.T) {
 	client, server := makeCSPair(t, handler)
 	go server.Run()
 
-	conn, err := client.NewConn(messages.IPv4)
+	conn, err := client.NewConn(util.IPv4)
 	if err != nil {
 		t.Errorf("NewConn error: %v", err)
 	}

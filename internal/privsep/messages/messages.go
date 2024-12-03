@@ -17,6 +17,7 @@ import (
 	"net"
 
 	"github.com/pcekm/graphping/internal/backend"
+	"github.com/pcekm/graphping/internal/util"
 )
 
 const (
@@ -114,25 +115,6 @@ func (t messageType) String() string {
 		return "msgPingReply"
 	default:
 		return fmt.Sprintf("(unknown:%d)", t)
-	}
-}
-
-// IPVersion is the version of IP to  use.
-type IPVersion byte
-
-const (
-	IPv4 IPVersion = 4
-	IPv6 IPVersion = 6
-)
-
-func (v IPVersion) String() string {
-	switch v {
-	case IPv4:
-		return "IPv4"
-	case IPv6:
-		return "IPv6"
-	default:
-		return fmt.Sprintf("(unknown:%d)", v)
 	}
 }
 
@@ -307,8 +289,8 @@ func (m RawMessage) argConnectionID(i int) ConnectionID {
 }
 
 // Gets an IPVersion arg at position i.
-func (m RawMessage) argIPVersion(i int) IPVersion {
-	return IPVersion(m.argByte(i))
+func (m RawMessage) argIPVersion(i int) util.IPVersion {
+	return util.IPVersion(m.argByte(i))
 }
 
 // Gets an IP address arg at position i.
@@ -420,7 +402,7 @@ func (m RawMessage) asPrivilegeDrop() (msg PrivilegeDrop) {
 
 // OpenConnection is a message to open a new ICMP connection.
 type OpenConnection struct {
-	IPVer IPVersion
+	IPVer util.IPVersion
 }
 
 func (c OpenConnection) WriteTo(w io.Writer) (int64, error) {

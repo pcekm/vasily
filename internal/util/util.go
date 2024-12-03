@@ -3,6 +3,7 @@
 package util
 
 import (
+	"fmt"
 	"math/rand"
 	"net"
 	"sync"
@@ -40,6 +41,25 @@ var IDGenerator IDGen = &idGen{nextID: rand.Intn(numSequenceNos)}
 // and _hopefully_ unique for any other pings running on the host.
 func GenID() int {
 	return IDGenerator.GenID()
+}
+
+// IPVersion is the version of IP to  use.
+type IPVersion byte
+
+const (
+	IPv4 IPVersion = 4
+	IPv6 IPVersion = 6
+)
+
+func (v IPVersion) String() string {
+	switch v {
+	case IPv4:
+		return "IPv4"
+	case IPv6:
+		return "IPv6"
+	default:
+		return fmt.Sprintf("(unknown:%d)", v)
+	}
 }
 
 // Network returns the appropriate network for the given address.

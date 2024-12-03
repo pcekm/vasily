@@ -15,6 +15,7 @@ import (
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/backend/icmp"
 	"github.com/pcekm/graphping/internal/privsep/messages"
+	"github.com/pcekm/graphping/internal/util"
 )
 
 type connMaker func() *icmp.PingConn
@@ -178,9 +179,9 @@ func (s *Server) handlePrivilegeDrop(messages.PrivilegeDrop) {
 func (s *Server) handleOpenConnection(msg messages.OpenConnection) {
 	var conn *icmp.PingConn
 	switch msg.IPVer {
-	case messages.IPv4:
+	case util.IPv4:
 		conn = s.newIPv4()
-	case messages.IPv6:
+	case util.IPv6:
 		conn = s.newIPv6()
 	default:
 		log.Panicf("Unknown IP version: %v", msg.IPVer)

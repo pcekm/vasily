@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/pcekm/graphping/internal/privsep/messages"
+	"github.com/pcekm/graphping/internal/util"
 )
 
 // Client is the client for the privsep server.
@@ -45,7 +46,7 @@ func (c *Client) Close() error {
 }
 
 // NewConn creates a new ping connection.
-func (c *Client) NewConn(ipVer messages.IPVersion) (*Connection, error) {
+func (c *Client) NewConn(ipVer util.IPVersion) (*Connection, error) {
 	err := c.sendMessage(messages.OpenConnection{IPVer: ipVer})
 	if err != nil {
 		return nil, err

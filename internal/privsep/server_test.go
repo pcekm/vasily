@@ -12,6 +12,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/privsep/messages"
+	"github.com/pcekm/graphping/internal/util"
 )
 
 type serverHarness struct {
@@ -150,11 +151,11 @@ func TestPingLoopback(t *testing.T) {
 	}
 
 	cases := []struct {
-		Ver  messages.IPVersion
+		Ver  util.IPVersion
 		Addr net.IP
 	}{
-		{Ver: messages.IPv4, Addr: net.ParseIP("127.0.0.1")},
-		{Ver: messages.IPv6, Addr: net.ParseIP("::1")},
+		{Ver: util.IPv4, Addr: net.ParseIP("127.0.0.1")},
+		{Ver: util.IPv6, Addr: net.ParseIP("::1")},
 	}
 	for _, c := range cases {
 		t.Run(c.Ver.String(), func(t *testing.T) {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pcekm/graphping/internal/backend"
+	"github.com/pcekm/graphping/internal/util"
 )
 
 // Makes a raw message that is as long as it can possibly be. (About 64k).
@@ -55,7 +56,7 @@ func TestReadMessage(t *testing.T) {
 		{
 			Name:    "OpenConnection",
 			Encoded: []byte{byte(msgOpenConnection), 1, 1, 4},
-			Want:    OpenConnection{IPVer: IPv4},
+			Want:    OpenConnection{IPVer: util.IPv4},
 		},
 		{
 			Name:    "OpenConnection/MissingIPVer",
@@ -206,7 +207,7 @@ func TestMessage_WriteTo(t *testing.T) {
 		{Name: "PrivilegeDrop", Msg: PrivilegeDrop{}, Want: []byte{byte(msgPrivilegeDrop), 0}},
 		{
 			Name: "OpenConnection",
-			Msg:  OpenConnection{IPVer: IPv6},
+			Msg:  OpenConnection{IPVer: util.IPv6},
 			Want: []byte{byte(msgOpenConnection), 1, 1, 6},
 		},
 		{
