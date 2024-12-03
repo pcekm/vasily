@@ -41,23 +41,15 @@ type PingConn struct {
 }
 
 // New creates a new ICMP ping connection. The network arg should be:
-//
-//	"udp4":          Unprivileged IPv4 ping on MacOS or Linux
-//	"udp6":          Unprivileged IPV6 ping on MacOS or Linux
-//	"ip4:icmp":      Privileged, raw-socket IPv4 ping
-//	"ip6:ipv6-icmp": Privileged, raw socket IPv6 ping
-//
-// Addr is the interface address to listen on. An empty string means all
-// interfaces. See icmp.PacketConn.ListenPacket() for more information.
-func New(network string, addr string) (*PingConn, error) {
+func New(ipVer util.IPVersion) (*PingConn, error) {
 	protoNum := icmpV4ProtoNum
 	icmpType := icmp.Type(ipv4.ICMPTypeEcho)
-	if strings.HasSuffix(network, "6") {
+	if ipVer == util.IPv6 {
 		protoNum = icmpV6ProtoNum
 		icmpType = ipv6.ICMPTypeEchoRequest
 	}
 
-	conn, err := icmp.ListenPacket(network, addr)
+	conn, err := newConn(ipVer)
 	if err != nil {
 		return nil, fmt.Errorf("listen error: %v", err)
 	}
@@ -76,12 +68,10 @@ func New(network string, addr string) (*PingConn, error) {
 }
 
 // Gets the ICMP id for this session.
-func pingID(conn *icmp.PacketConn) (int, error) {
+func pingID(conn net.PacketConn) (int, error) {
 	switch runtime.GOOS {
-	case "darwin":
+	case "darwin", "linux":
 		return util.GenID(), nil
-	case "linux":
-		return conn.LocalAddr().(*net.UDPAddr).Port, nil
 	default:
 		return 0, fmt.Errorf("unsupported OS: %v", runtime.GOOS)
 	}
@@ -120,6 +110,7 @@ func (p *PingConn) ttl() (int, error) {
 
 // WriteTo sends an ICMP echo request.
 func (p *PingConn) WriteTo(pkt *backend.Packet, dest net.Addr, opts ...backend.WriteOption) error {
+	dest = wrangleAddr(dest)
 	var withTTL int
 	for _, o := range opts {
 		switch o := o.(type) {

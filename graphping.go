@@ -15,6 +15,7 @@ import (
 	"github.com/pcekm/graphping/internal/lookup"
 	"github.com/pcekm/graphping/internal/privsep"
 	"github.com/pcekm/graphping/internal/tui"
+	"github.com/pcekm/graphping/internal/util"
 )
 
 // Flags.
@@ -61,9 +62,9 @@ func main() {
 }
 
 func newV4Conn() (backend.Conn, error) {
-	return icmp.New("udp4", *listenAddr)
+	return icmp.New(util.IPv4)
 }
 
 func newV6Conn() (backend.Conn, error) {
-	return icmp.New("udp6", *listenAddr)
+	return icmp.New(util.IPv6)
 }

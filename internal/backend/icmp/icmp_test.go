@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"runtime"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pcekm/graphping/internal/backend"
+	"github.com/pcekm/graphping/internal/util"
 )
 
 var (
@@ -24,27 +26,26 @@ func asReply(pkt *backend.Packet) *backend.Packet {
 }
 
 func TestPingConnection(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skipf("Unsupported OS")
+	}
 	cases := []struct {
-		network    string
+		ipVer      util.IPVersion
 		listenAddr string
 		dest       *net.UDPAddr
 		ttl        int
 	}{
-		{network: "udp4", dest: localhostV4},
-		{network: "udp4", dest: localhostV4, ttl: 1},
-		{network: "udp4", dest: localhostV4, listenAddr: localhostV4.IP.String()},
-		{network: "udp4", dest: localhostV4, listenAddr: localhostV4.IP.String(), ttl: 1},
-		{network: "udp6", dest: localhostV6},
-		{network: "udp6", dest: localhostV6, ttl: 1},
-		{network: "udp6", dest: localhostV6, listenAddr: localhostV6.IP.String()},
-		{network: "udp6", dest: localhostV6, listenAddr: localhostV6.IP.String(), ttl: 1},
+		{ipVer: util.IPv4, dest: localhostV4},
+		{ipVer: util.IPv4, dest: localhostV4, ttl: 1},
+		{ipVer: util.IPv6, dest: localhostV6},
+		{ipVer: util.IPv6, dest: localhostV6, ttl: 1},
 	}
 	for _, c := range cases {
-		name := fmt.Sprintf("%s/%s/%d", c.dest.IP.String(), c.listenAddr, c.ttl)
+		name := fmt.Sprintf("%s/%d", c.dest.IP.String(), c.ttl)
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			conn, err := New(c.network, c.listenAddr)
+			conn, err := New(c.ipVer)
 			if err != nil {
 				t.Fatalf("Error opening connection: %v", err)
 			}

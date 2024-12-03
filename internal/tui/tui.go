@@ -113,12 +113,18 @@ func (m *Model) readNextRow() tea.Cmd {
 }
 
 func (m *Model) connFuncForAddr(addr net.Addr) backend.NewConn {
-	udpAddr, ok := addr.(*net.UDPAddr)
-	if !ok {
-		// This should never happen.
+	var ip net.IP
+	switch addr := addr.(type) {
+	case *net.IPAddr:
+		ip = addr.IP
+	case *net.UDPAddr:
+		ip = addr.IP
+	case *net.TCPAddr:
+		ip = addr.IP
+	default:
 		log.Panicf("Wrong address type: %#v", addr)
 	}
-	if udpAddr.IP.To4() == nil {
+	if ip.To4() == nil {
 		return m.connV6
 	}
 	return m.connV4

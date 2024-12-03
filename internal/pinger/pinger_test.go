@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/backend/icmp"
 	"github.com/pcekm/graphping/internal/backend/test"
+	"github.com/pcekm/graphping/internal/util"
 	"go.uber.org/mock/gomock"
 )
 
@@ -40,6 +42,9 @@ func newConnFunc(c backend.Conn) backend.NewConn {
 }
 
 func TestLive(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skipf("Unsupported OS")
+	}
 	var mu sync.Mutex
 	callbackRes := make([]PingResult, 10)
 	opts := &Options{
@@ -52,7 +57,7 @@ func TestLive(t *testing.T) {
 			callbackRes[seq] = res
 		},
 	}
-	p, err := New(func() (backend.Conn, error) { return icmp.New("udp4", "") }, test.LoopbackV4, opts)
+	p, err := New(func() (backend.Conn, error) { return icmp.New(util.IPv4) }, test.LoopbackV4, opts)
 	if err != nil {
 		t.Fatalf("Error creating pinger: %v", err)
 	}

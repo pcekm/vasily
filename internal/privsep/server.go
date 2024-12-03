@@ -8,7 +8,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"runtime"
 	"strings"
 	"sync"
 
@@ -21,11 +20,7 @@ import (
 type connMaker func() *icmp.PingConn
 
 func defaultNewIPv4Conn() *icmp.PingConn {
-	net := "ip4:1"
-	if runtime.GOOS == "darwin" {
-		net = "udp4"
-	}
-	conn, err := icmp.New(net, "")
+	conn, err := icmp.New(util.IPv4)
 	if err != nil {
 		log.Panicf("Error opening IPv4 connection: %v", err)
 	}
@@ -33,11 +28,7 @@ func defaultNewIPv4Conn() *icmp.PingConn {
 }
 
 func defaultNewIPv6Conn() *icmp.PingConn {
-	net := "ip6:58"
-	if runtime.GOOS == "darwin" {
-		net = "udp6"
-	}
-	conn, err := icmp.New(net, "")
+	conn, err := icmp.New(util.IPv6)
 	if err != nil {
 		log.Panicf("Error opening IPv4 connection: %v", err)
 	}
