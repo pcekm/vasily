@@ -112,7 +112,6 @@ func Initialize() func() {
 	if err != nil {
 		log.Fatalf("Can't determine self executable: %v", err)
 	}
-	// cmd := exec.Command("sudo", "dlv", "exec", me, "--headless", "-l", "127.0.0.1:17000", "--api-version", "2", "--", startPrivFlag)
 	cmd := exec.Command(me, startPrivFlag)
 	cmd.Args[0] = "graphping"
 	cmd.Env = []string{}

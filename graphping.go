@@ -67,6 +67,16 @@ func newV4Conn() (backend.Conn, error) {
 	case "darwin":
 		return icmp.New(util.IPv4)
 	case "linux":
+		// TODO: Linux shouldn't require root. It supports a similar mechanism
+		// as Darwin, but a limitation with Go's x/net module makes unprivileged
+		// traceroutes impossible. Connections only receive ICMP echo replies.
+		// Other types of packets, like the all important (to a traceroute) time
+		// exceeded message, don't get sent.
+		//
+		// It _is_ possible to receive those packets on Linux without root, but
+		// the x/net module doesn't make it possible. (It requires recvfrom with
+		// the MSG_ERRQUEUE flag, and likely setting the IP_RECVERR option as
+		// well.)
 		return privsep.Client.NewConn(util.IPv4)
 	}
 	log.Panic("Unsupported OS")
