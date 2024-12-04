@@ -6,6 +6,7 @@ package main
 import (
 	"log"
 	"os"
+	"runtime"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/pflag"
@@ -62,9 +63,23 @@ func main() {
 }
 
 func newV4Conn() (backend.Conn, error) {
-	return icmp.New(util.IPv4)
+	switch runtime.GOOS {
+	case "darwin":
+		return icmp.New(util.IPv4)
+	case "linux":
+		return privsep.Client.NewConn(util.IPv4)
+	}
+	log.Panic("Unsupported OS")
+	return nil, nil
 }
 
 func newV6Conn() (backend.Conn, error) {
-	return icmp.New(util.IPv6)
+	switch runtime.GOOS {
+	case "darwin":
+		return icmp.New(util.IPv6)
+	case "linux":
+		return privsep.Client.NewConn(util.IPv6)
+	}
+	log.Panic("Unsupported OS")
+	return nil, nil
 }

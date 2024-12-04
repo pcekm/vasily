@@ -88,8 +88,12 @@ const (
 	startPrivFlag = "[privileged]"
 )
 
+var (
+	Client *client.Client
+)
+
 func Initialize() func() {
-	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
+	if runtime.GOOS == "darwin" {
 		return func() {}
 	}
 
@@ -108,6 +112,7 @@ func Initialize() func() {
 	if err != nil {
 		log.Fatalf("Can't determine self executable: %v", err)
 	}
+	// cmd := exec.Command("sudo", "dlv", "exec", me, "--headless", "-l", "127.0.0.1:17000", "--api-version", "2", "--", startPrivFlag)
 	cmd := exec.Command(me, startPrivFlag)
 	cmd.Args[0] = "graphping"
 	cmd.Env = []string{}
@@ -125,9 +130,9 @@ func Initialize() func() {
 		log.Fatalf("Error running privileged server: %v", err)
 	}
 
-	privsepClient := client.New(clientIn, clientOut)
+	Client = client.New(clientIn, clientOut)
 
-	return shutdownFunc(cmd, privsepClient)
+	return shutdownFunc(cmd, Client)
 }
 
 func shutdownFunc(cmd *exec.Cmd, privsepClient *client.Client) func() {

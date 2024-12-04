@@ -62,23 +62,16 @@ func (v IPVersion) String() string {
 	}
 }
 
-// Network returns the appropriate network for the given address.
-func Network(addr net.Addr) string {
-	var ip net.IP
+// IP returns the IP from an address.
+func IP(addr net.Addr) net.IP {
 	switch addr := addr.(type) {
 	case *net.UDPAddr:
-		ip = addr.IP
+		return addr.IP
 	case *net.IPAddr:
-		ip = addr.IP
+		return addr.IP
 	case *net.TCPAddr:
-		ip = addr.IP
+		return addr.IP
 	default:
-		return ""
-	}
-	// TODO: Support privileged ping.
-	if ip.To4() != nil {
-		return "udp4"
-	} else {
-		return "udp6"
+		return nil
 	}
 }

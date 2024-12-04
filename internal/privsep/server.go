@@ -93,7 +93,7 @@ func (s *Server) readLoop(id messages.ConnectionID) {
 		msg := messages.PingReply{
 			ID:     id,
 			Packet: *pkt,
-			Peer:   peer.(*net.UDPAddr).IP,
+			Peer:   util.IP(peer),
 		}
 		s.write(msg)
 	}
