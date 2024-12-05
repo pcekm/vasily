@@ -15,10 +15,11 @@ root privileges on most systems. There are two notable exceptions to this:
   - Darwin / MacOS: Allows unprivileged pings with enough flexibility that both
     pings and traceroutes can be made without any special privileges.
 
-  - Linux: Allows privileged pings, but only with a specific kernel setting. And
-    even with that setting, it does not allow modification of the time to live.
-    Which means that for the purposes of this program, which does traceroutes,
-    root is still necessary.
+  - Linux: Allows privileged pings, but only with a specific kernel setting.
+    Unfortunately, even with that setting, Go's x/net libraries don't work
+    for traceroutes. Receiving ICMP time exceeded messages requires the
+    IP_RECVERR socket option, and a specific call to the recvfrom syscall with
+    the MSG_ERRQUEUE flag. Neither can be done with x/net/icmp.
 
 A frequent, simpler approach is to open the raw socket and then immediately drop
 privileges. However, since this program is interactive, things are more
