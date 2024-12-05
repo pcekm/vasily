@@ -231,8 +231,6 @@ func New() *Model {
 func (t *Model) Update(msg tea.Msg) tea.Cmd {
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		t.handleResize(msg)
 	case AddRow:
 		cmds = append(cmds, t.handleAddRow(msg))
 	case RowUpdated:
@@ -242,6 +240,31 @@ func (t *Model) Update(msg tea.Msg) tea.Cmd {
 	t.vp, vpCmd = t.vp.Update(msg)
 	cmds = append(cmds, vpCmd)
 	return tea.Batch(cmds...)
+}
+
+// SetSize sets the table size. It must be called at least once in order for
+// anything to be displayed.
+func (t *Model) SetSize(width, height int) {
+	if !t.ready {
+		t.columns = make([]columnSpec, len(columnSpecs))
+		t.vp = viewport.New(width, height-1)
+		t.ready = true
+	}
+	t.vp.Width = width
+	t.vp.Height = height - 1
+	availSpace := float64(width - t.fixedWidth)
+	for id, spec := range columnSpecs {
+		t.columns[id] = spec
+		switch w := spec.Width.(type) {
+		case int:
+			t.columns[id].Width = w
+		case float64:
+			t.columns[id].Width = int(math.Round(math.Max(minColWidth, w*availSpace)))
+		}
+		if id == colResults {
+			t.latencyColumns = t.columns[id].Width.(int)
+		}
+	}
 }
 
 func (t *Model) handleAddRow(ar AddRow) tea.Cmd {
@@ -255,29 +278,6 @@ func (t *Model) handleRowUpdated(_ RowUpdated) tea.Cmd {
 	// TODO: Actually just update one row?
 	t.updateRows()
 	return nil
-}
-
-func (t *Model) handleResize(msg tea.WindowSizeMsg) {
-	if !t.ready {
-		t.columns = make([]columnSpec, len(columnSpecs))
-		t.vp = viewport.New(msg.Width, msg.Height-1)
-		t.ready = true
-	}
-	t.vp.Width = msg.Width
-	t.vp.Height = msg.Height - 1
-	availSpace := float64(msg.Width - t.fixedWidth)
-	for id, spec := range columnSpecs {
-		t.columns[id] = spec
-		switch w := spec.Width.(type) {
-		case int:
-			t.columns[id].Width = w
-		case float64:
-			t.columns[id].Width = int(math.Round(math.Max(minColWidth, w*availSpace)))
-		}
-		if id == colResults {
-			t.latencyColumns = t.columns[id].Width.(int)
-		}
-	}
 }
 
 func (t *Model) updateRows() {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -12,8 +13,11 @@ import (
 	"github.com/pcekm/graphping/internal/lookup"
 	"github.com/pcekm/graphping/internal/pinger"
 	"github.com/pcekm/graphping/internal/tracer"
+	"github.com/pcekm/graphping/internal/tui/logwindow"
 	"github.com/pcekm/graphping/internal/tui/table"
 )
+
+const logHeight = 10
 
 // Options contain main program options.
 type Options struct {
@@ -44,11 +48,15 @@ type traceStepMsg struct {
 
 // Model is the main text UI model.
 type Model struct {
+	width      int
+	height     int
 	table      *table.Model
 	connV4     backend.NewConn
 	connV6     backend.NewConn
 	hosts      []string
 	rowUpdates chan table.RowKey
+	log        *logwindow.Model
+	showLog    bool
 	opts       *Options
 }
 
@@ -60,6 +68,7 @@ func New(connV4, connV6 backend.NewConn, hosts []string, opts *Options) (*Model,
 		connV6:     connV6,
 		hosts:      hosts,
 		rowUpdates: make(chan table.RowKey),
+		log:        logwindow.New(),
 		opts:       opts,
 	}
 	return m, nil
@@ -73,7 +82,11 @@ func (m *Model) Close() error {
 
 // Init initializes the model.
 func (m *Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{m.readNextRow()}
+	log.SetOutput(m.log)
+	cmds := []tea.Cmd{
+		m.readNextRow(),
+		m.log.Init(),
+	}
 	for _, h := range m.hosts {
 		addr, err := lookup.String(h)
 		if err != nil {
@@ -92,10 +105,13 @@ func (m *Model) Init() tea.Cmd {
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds := []tea.Cmd{
 		m.table.Update(msg),
+		m.log.Update(msg),
 	}
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		cmds = append(cmds, m.handleKeyMsg(msg))
+	case tea.WindowSizeMsg:
+		cmds = append(cmds, m.handleResize(msg))
 	case table.RowUpdated:
 		cmds = append(cmds, m.readNextRow())
 	case traceStepMsg:
@@ -190,6 +206,8 @@ func (m *Model) updateTraceStep(msg traceStepMsg) tea.Cmd {
 
 func (m *Model) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
+	case "l":
+		return m.toggleLog()
 	case "ctrl+c", "q":
 		return tea.Quit
 	case "ctrl+z":
@@ -198,7 +216,34 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
+func (m *Model) toggleLog() tea.Cmd {
+	m.showLog = !m.showLog
+	m.updateSizes()
+	return nil
+}
+
+func (m *Model) updateSizes() {
+	if m.showLog {
+		m.table.SetSize(m.width, m.height-logHeight)
+		m.log.SetSize(m.width, logHeight)
+	} else {
+		m.table.SetSize(m.width, m.height)
+	}
+}
+
+func (m *Model) handleResize(msg tea.WindowSizeMsg) tea.Cmd {
+	m.width = msg.Width
+	m.height = msg.Height
+	m.updateSizes()
+	return nil
+}
+
 // View renders the model.
 func (m *Model) View() string {
-	return m.table.View()
+	var res []string
+	res = append(res, m.table.View())
+	if m.showLog {
+		res = append(res, m.log.View())
+	}
+	return strings.Join(res, "\n")
 }
