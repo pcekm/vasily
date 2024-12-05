@@ -131,16 +131,17 @@ func Initialize() func() {
 	if err != nil {
 		log.Fatalf("Error creating pipe: %v", err)
 	}
+	waited := make(chan any)
 	go stderrLogger(clientErr)
 
 	if err := cmd.Start(); err != nil {
 		log.Fatalf("Error running privileged server: %v", err)
 	}
-	go watchdog(cmd)
+	go watchdog(cmd, waited)
 
 	Client = client.New(clientIn, clientOut)
 
-	return shutdownFunc(cmd, Client)
+	return shutdownFunc(cmd, Client, waited)
 }
 
 func stderrLogger(r io.Reader) {
@@ -157,24 +158,25 @@ func stderrLogger(r io.Reader) {
 	}
 }
 
-func watchdog(cmd *exec.Cmd) {
+func watchdog(cmd *exec.Cmd, waited chan<- any) {
+	defer close(waited)
 	if err := cmd.Wait(); err != nil {
 		log.Fatalf("Privsep server exited with error: %v", err)
 	}
 }
 
-func shutdownFunc(cmd *exec.Cmd, privsepClient *client.Client) func() {
+func shutdownFunc(cmd *exec.Cmd, privsepClient *client.Client, waited <-chan any) func() {
 	return func() {
-		log.Print("Shutting down privsep.")
+		if err := privsepClient.Shutdown(); err != nil {
+			log.Printf("Error shutting down privsep: %v", err)
+			if err := cmd.Process.Kill(); err != nil {
+				log.Printf("Error killing privsep: %v", err)
+			}
+		}
 		if err := privsepClient.Close(); err != nil {
 			log.Printf("Error closing privsep client: %v", err)
 		}
-		if err := cmd.Process.Kill(); err != nil {
-			log.Printf("Error killing privsep process: %v", err)
-		}
-		if err := cmd.Wait(); err != nil {
-			log.Printf("Error waiting for privsep: %v", err)
-		}
+		<-waited
 	}
 }
 

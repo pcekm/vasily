@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"sync"
 
 	"github.com/pcekm/graphping/internal/privsep/messages"
@@ -66,6 +67,11 @@ func (c *Client) NewConn(ipVer util.IPVersion) (*Connection, error) {
 	return conn, nil
 }
 
+// Shutdown sends a shutdown message to the server.
+func (c *Client) Shutdown() error {
+	return c.sendMessage(messages.Shutdown{})
+}
+
 // Sends a message.
 func (c *Client) sendMessage(msg messages.Message) error {
 	c.mu.Lock()
@@ -81,7 +87,9 @@ func (c *Client) inputDemux() {
 	for {
 		msg, err := messages.ReadMessage(c.inb)
 		if err != nil {
-			log.Printf("Error reading from privsep server: %v", err)
+			if !errors.Is(err, os.ErrClosed) {
+				log.Printf("Error reading from privsep server: %v", err)
+			}
 			return
 		}
 		switch msg := msg.(type) {
