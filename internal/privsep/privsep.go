@@ -74,7 +74,10 @@ cause it to immediately exit. The unprivileged client can be more forgiving.
 package privsep
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -124,14 +127,40 @@ func Initialize() func() {
 	if err != nil {
 		log.Fatalf("Error creating pipe: %v", err)
 	}
+	clientErr, err := cmd.StderrPipe()
+	if err != nil {
+		log.Fatalf("Error creating pipe: %v", err)
+	}
+	go stderrLogger(clientErr)
 
 	if err := cmd.Start(); err != nil {
 		log.Fatalf("Error running privileged server: %v", err)
 	}
+	go watchdog(cmd)
 
 	Client = client.New(clientIn, clientOut)
 
 	return shutdownFunc(cmd, Client)
+}
+
+func stderrLogger(r io.Reader) {
+	rb := bufio.NewReader(r)
+	for {
+		line, err := rb.ReadString('\n')
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				log.Printf("ReadString error: %v", err)
+			}
+			return
+		}
+		log.Printf("privsep: %v", line)
+	}
+}
+
+func watchdog(cmd *exec.Cmd) {
+	if err := cmd.Wait(); err != nil {
+		log.Fatalf("Privsep server exited with error: %v", err)
+	}
 }
 
 func shutdownFunc(cmd *exec.Cmd, privsepClient *client.Client) func() {
