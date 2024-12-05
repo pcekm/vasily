@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -74,10 +75,11 @@ func New(connV4, connV6 backend.NewConn, hosts []string, opts *Options) (*Model,
 	return m, nil
 }
 
-// Close shuts down the model.
-func (m *Model) Close() error {
-	close(m.rowUpdates)
-	return nil
+func (m *Model) quitNicely() tea.Cmd {
+	return func() tea.Msg {
+		log.SetOutput(os.Stderr)
+		return tea.QuitMsg{}
+	}
 }
 
 // Init initializes the model.
@@ -209,7 +211,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 	case "l":
 		return m.toggleLog()
 	case "ctrl+c", "q":
-		return tea.Quit
+		return m.quitNicely()
 	case "ctrl+z":
 		return tea.Suspend
 	}
