@@ -100,6 +100,7 @@ func Initialize() func() {
 	if len(os.Args) == 2 && os.Args[1] == startPrivFlag {
 		log.Printf("Starting privileged server.")
 		server := newServer()
+		log.SetOutput(logWriter{s: server})
 		server.run()
 		os.Exit(0)
 	}

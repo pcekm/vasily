@@ -75,6 +75,9 @@ const (
 	// msgPrivilegeDrop is a request to drop privileges.
 	msgPrivilegeDrop
 
+	// msgLog contains a log message.
+	msgLog
+
 	// msgOpenConnection is a request message to create a new connection.
 	msgOpenConnection
 
@@ -101,6 +104,8 @@ func (t messageType) String() string {
 		return "msgShutdown"
 	case msgPrivilegeDrop:
 		return "msgPrivilegeDrop"
+	case msgLog:
+		return "msgLog"
 	case msgOpenConnection:
 		return "msgOpenConnection"
 	case msgOpenConnectionReply:
@@ -135,6 +140,8 @@ func ReadMessage(r io.ByteReader) (msg Message, err error) {
 		msg = raw.asShutdown()
 	case msgPrivilegeDrop:
 		msg = raw.asPrivilegeDrop()
+	case msgLog:
+		msg = raw.asLog()
 	case msgOpenConnection:
 		msg = raw.asOpenConnection()
 	case msgOpenConnectionReply:
@@ -398,6 +405,25 @@ func (m RawMessage) asPrivilegeDrop() (msg PrivilegeDrop) {
 	m.checkType(msgPrivilegeDrop)
 	m.checkNArgs(0)
 	return msg
+}
+
+// Log is a log message.
+type Log struct {
+	// Msg is the logging message.
+	Msg string
+}
+
+func (l Log) WriteTo(w io.Writer) (int64, error) {
+	raw := RawMessage{
+		Type: msgLog,
+		Args: [][]byte{[]byte(l.Msg)},
+	}
+	return raw.WriteTo(w)
+}
+
+func (m RawMessage) asLog() (msg Log) {
+	m.checkType(msgLog)
+	return Log{Msg: m.argString(0)}
 }
 
 // OpenConnection is a message to open a new ICMP connection.

@@ -18,6 +18,7 @@ type Client struct {
 	in            io.ReadCloser
 	inb           *bufio.Reader
 	openConnReply chan messages.OpenConnectionReply
+	inputTap      chan messages.Message
 
 	mu          sync.Mutex
 	out         io.WriteCloser
@@ -85,6 +86,8 @@ func (c *Client) inputDemux() {
 			return
 		}
 		switch msg := msg.(type) {
+		case messages.Log:
+			c.handleLog(msg)
 		case messages.OpenConnectionReply:
 			c.openConnReply <- msg
 		case messages.CloseConnectionReply:
@@ -94,7 +97,16 @@ func (c *Client) inputDemux() {
 		default:
 			log.Printf("Unknown message read from privsep server: %#v", msg)
 		}
+
+		// For testing:
+		if c.inputTap != nil {
+			c.inputTap <- msg
+		}
 	}
+}
+
+func (c *Client) handleLog(msg messages.Log) {
+	log.Print(msg.Msg)
 }
 
 func (c *Client) handleCloseConnectionReply(msg messages.CloseConnectionReply) {

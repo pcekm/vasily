@@ -35,6 +35,16 @@ func defaultNewIPv6Conn() *icmp.PingConn {
 	return conn
 }
 
+// logWriter writes log messages back to the client.
+type logWriter struct {
+	s *Server
+}
+
+func (w logWriter) Write(b []byte) (int, error) {
+	w.s.write(messages.Log{Msg: string(b)})
+	return len(b), nil
+}
+
 // Handles messages from [privClient] and issues replies.
 type Server struct {
 	newIPv4 connMaker
@@ -142,6 +152,8 @@ func (s *Server) handleMessage(msg messages.Message) {
 		s.handleShutdown(msg)
 	case messages.PrivilegeDrop:
 		s.handlePrivilegeDrop(msg)
+	case messages.Log:
+		s.handleLog(msg)
 	case messages.OpenConnection:
 		s.handleOpenConnection(msg)
 	case messages.OpenConnectionReply:
@@ -165,6 +177,10 @@ func (s *Server) handlePrivilegeDrop(messages.PrivilegeDrop) {
 	if err := dropPrivileges(); err != nil {
 		log.Panicf("Failed to drop privileges: %v", err)
 	}
+}
+
+func (s *Server) handleLog(msg messages.Log) {
+	log.Panicf("Unexpected message: %#v", msg)
 }
 
 func (s *Server) handleOpenConnection(msg messages.OpenConnection) {
