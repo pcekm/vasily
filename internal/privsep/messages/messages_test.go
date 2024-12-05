@@ -53,7 +53,6 @@ func TestReadMessage(t *testing.T) {
 		{Name: "Shutdown", Encoded: []byte{byte(msgShutdown), 0}, Want: Shutdown{}},
 		{Name: "Shutdown/ExtraArgs", Encoded: []byte{byte(msgShutdown), 1, 0}, WantErr: true},
 		{Name: "PrivilegeDrop", Encoded: []byte{byte(msgPrivilegeDrop), 0}, Want: PrivilegeDrop{}},
-		{Name: "Log", Encoded: []byte{byte(msgLog), 1, 3, 102, 111, 111}, Want: Log{Msg: "foo"}},
 		{
 			Name:    "OpenConnection",
 			Encoded: []byte{byte(msgOpenConnection), 1, 1, 4},
@@ -206,7 +205,6 @@ func TestMessage_WriteTo(t *testing.T) {
 
 		{Name: "Shutdown", Msg: Shutdown{}, Want: []byte{byte(msgShutdown), 0}},
 		{Name: "PrivilegeDrop", Msg: PrivilegeDrop{}, Want: []byte{byte(msgPrivilegeDrop), 0}},
-		{Name: "Log", Msg: Log{Msg: "foo"}, Want: []byte{byte(msgLog), 1, 3, 102, 111, 111}},
 		{
 			Name: "OpenConnection",
 			Msg:  OpenConnection{IPVer: util.IPv6},

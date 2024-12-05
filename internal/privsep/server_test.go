@@ -3,7 +3,6 @@ package privsep
 import (
 	"bufio"
 	"io"
-	"log"
 	"net"
 	"os"
 	"runtime"
@@ -125,27 +124,6 @@ func TestShutdown(t *testing.T) {
 		t.Errorf("Shutdown did not call sys.Exit")
 	}
 
-}
-
-func TestLogging(t *testing.T) {
-	h := newServerHarness(t)
-	defer h.Close()
-
-	log.SetOutput(logWriter{s: h.srv})
-	defer log.SetOutput(os.Stderr)
-	log.SetFlags(0)
-	defer log.SetFlags(log.LstdFlags)
-
-	go func() {
-		log.Print("foo")
-		h.DoneWriting()
-	}()
-
-	h.Run()
-	got := h.Read()
-	if diff := cmp.Diff(messages.Log{Msg: "foo\n"}, got); diff != "" {
-		t.Errorf("Wrong log message (-want, +got):\n%v", diff)
-	}
 }
 
 // The privilege-related tests are smoke tests. In the sense that they _pass_ if

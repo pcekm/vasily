@@ -8,7 +8,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -229,36 +228,5 @@ func TestWriteTo(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, gotMsg); diff != "" {
 		t.Errorf("Wrong packet received by server (-want, +got):\n%v", diff)
-	}
-}
-
-func TestLog(t *testing.T) {
-	handler := func(msg messages.Message) messages.Message {
-		switch msg := msg.(type) {
-		case messages.Log:
-			return msg
-		}
-		return nil
-	}
-	client, server := makeCSPair(t, handler)
-	go server.Run()
-	client.inputTap = make(chan messages.Message, 1)
-
-	var lb strings.Builder
-
-	log.SetFlags(0)
-	defer log.SetFlags(log.LstdFlags)
-	log.SetOutput(&lb)
-	defer log.SetOutput(os.Stderr)
-
-	if err := client.sendMessage(messages.Log{Msg: "foo"}); err != nil {
-		t.Errorf("sendMessage error: %v", err)
-	}
-
-	// Wait for the message to be handled.
-	<-client.inputTap
-
-	if diff := cmp.Diff("foo\n", lb.String()); diff != "" {
-		t.Errorf("Wrong log output (-want, +got):\n%v", diff)
 	}
 }
