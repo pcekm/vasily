@@ -79,8 +79,7 @@ func newV4Conn() (backend.Conn, error) {
 		// well.)
 		return privsep.Client.NewConn(util.IPv4)
 	}
-	log.Panic("Unsupported OS")
-	return nil, nil
+	return privsep.Client.NewConn(util.IPv4)
 }
 
 func newV6Conn() (backend.Conn, error) {
@@ -90,6 +89,5 @@ func newV6Conn() (backend.Conn, error) {
 	case "linux":
 		return privsep.Client.NewConn(util.IPv6)
 	}
-	log.Panic("Unsupported OS")
-	return nil, nil
+	return privsep.Client.NewConn(util.IPv4)
 }
