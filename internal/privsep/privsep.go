@@ -1,3 +1,5 @@
+//go:build rawsock || !darwin
+
 /*
 Package privsep contains code for running some code as root.
 
@@ -81,7 +83,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"runtime"
 	"syscall"
 
 	"github.com/pcekm/graphping/internal/privsep/client"
@@ -96,10 +97,6 @@ var (
 )
 
 func Initialize() func() {
-	if runtime.GOOS == "darwin" {
-		return func() {}
-	}
-
 	if len(os.Args) == 2 && os.Args[1] == startPrivFlag {
 		log.Printf("Starting privileged server.")
 		server := newServer()

@@ -6,17 +6,13 @@ package main
 import (
 	"log"
 	"os"
-	"runtime"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/pflag"
 
-	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/backend/icmp"
 	"github.com/pcekm/graphping/internal/lookup"
 	"github.com/pcekm/graphping/internal/privsep"
 	"github.com/pcekm/graphping/internal/tui"
-	"github.com/pcekm/graphping/internal/util"
 )
 
 // Flags.
@@ -60,34 +56,4 @@ func main() {
 
 	prog := tea.NewProgram(tbl, tea.WithAltScreen())
 	prog.Run()
-}
-
-func newV4Conn() (backend.Conn, error) {
-	switch runtime.GOOS {
-	case "darwin":
-		return icmp.New(util.IPv4)
-	case "linux":
-		// TODO: Linux shouldn't require root. It supports a similar mechanism
-		// as Darwin, but a limitation with Go's x/net module makes unprivileged
-		// traceroutes impossible. Connections only receive ICMP echo replies.
-		// Other types of packets, like the all important (to a traceroute) time
-		// exceeded message, don't get sent.
-		//
-		// It _is_ possible to receive those packets on Linux without root, but
-		// the x/net module doesn't make it possible. (It requires recvfrom with
-		// the MSG_ERRQUEUE flag, and likely setting the IP_RECVERR option as
-		// well.)
-		return privsep.Client.NewConn(util.IPv4)
-	}
-	return privsep.Client.NewConn(util.IPv4)
-}
-
-func newV6Conn() (backend.Conn, error) {
-	switch runtime.GOOS {
-	case "darwin":
-		return icmp.New(util.IPv6)
-	case "linux":
-		return privsep.Client.NewConn(util.IPv6)
-	}
-	return privsep.Client.NewConn(util.IPv4)
 }

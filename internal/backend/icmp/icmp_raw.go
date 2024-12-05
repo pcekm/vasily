@@ -1,4 +1,4 @@
-//go:build !(darwin || linux)
+//go:build rawsock || !(darwin || linux)
 
 package icmp
 

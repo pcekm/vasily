@@ -1,3 +1,5 @@
+//go:build !rawsock
+
 package icmp
 
 import (

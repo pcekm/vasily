@@ -1,3 +1,5 @@
+//go:build rawsock || !darwin
+
 package privsep
 
 import (

@@ -2,8 +2,8 @@
 
 # Builds a setuid root version.
 
-set errexit
+set -o errexit
 
-go build
+go build "$@"
 sudo chown 0:0 graphping
 sudo chmod u+s graphping
