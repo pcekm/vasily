@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -65,16 +64,6 @@ func New(ipVer util.IPVersion) (*PingConn, error) {
 	}
 
 	return p, nil
-}
-
-// Gets the ICMP id for this session.
-func pingID(conn net.PacketConn) (int, error) {
-	switch runtime.GOOS {
-	case "darwin", "linux":
-		return util.GenID(), nil
-	default:
-		return 0, fmt.Errorf("unsupported OS: %v", runtime.GOOS)
-	}
 }
 
 // Close closes the connection.

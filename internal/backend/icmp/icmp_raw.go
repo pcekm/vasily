@@ -32,3 +32,8 @@ func wrangleAddr(addr net.Addr) *net.IPAddr {
 	}
 	return nil
 }
+
+// Gets the ICMP id for this session.
+func pingID(net.PacketConn) (int, error) {
+	return util.GenID(), nil
+}
