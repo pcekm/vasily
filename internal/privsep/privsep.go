@@ -1,5 +1,3 @@
-//go:build rawsock || !darwin
-
 /*
 Package privsep contains code for running some code as root.
 
@@ -98,6 +96,8 @@ var (
 )
 
 func Initialize() func() {
+	checkSetuid()
+
 	if len(os.Args) == 2 && os.Args[1] == startPrivFlag {
 		log.Printf("Starting privileged server.")
 		server := newServer()

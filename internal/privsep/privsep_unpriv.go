@@ -5,16 +5,9 @@ package privsep
 import (
 	"fmt"
 	"os"
-
-	"github.com/pcekm/graphping/internal/privsep/client"
 )
 
-var (
-	Client *client.Client
-)
-
-func Initialize() func() {
-
+func checkSetuid() {
 	if os.Getuid() != os.Geteuid() {
 		fmt.Fprintf(os.Stderr, `Error: running with setuid.
 
@@ -25,6 +18,4 @@ using something like:
 `, os.Args[0])
 		os.Exit(1)
 	}
-
-	return func() {}
 }
