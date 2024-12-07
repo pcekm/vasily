@@ -9,7 +9,6 @@ import (
 	"log"
 	"math"
 	"net"
-	"slices"
 	"sync"
 	"time"
 
@@ -138,23 +137,6 @@ type PingResult struct {
 	Peer net.Addr
 }
 
-// Stats holds statistics for a ping session.
-type Stats struct {
-	// N is the number of pings sent.
-	N int
-
-	// Failures is the number of pings without a successful reply.
-	Failures int
-
-	// AvgLatency is the average latency of successful pings.
-	AvgLatency time.Duration
-}
-
-// PacketLoss is the fraction of dropped packets.
-func (s Stats) PacketLoss() float64 {
-	return float64(s.Failures) / float64(s.N)
-}
-
 type readResult struct {
 	pkt  *backend.Packet
 	peer net.Addr
@@ -172,13 +154,8 @@ type Pinger struct {
 	opts *Options
 	done chan any
 
-	mu sync.Mutex
-	// This is a ring buffer of the last opts.History ping results.
-	// The index for a given sequence number is given by:
-	//    i = seq % len(history)
-	history []PingResult
-	lastSeq int
-	stats   Stats
+	mu   sync.Mutex
+	hist *pingHistory
 }
 
 // New creates a new pinger and starts pinging. It will continue until Close()
@@ -190,12 +167,11 @@ func New(newConn backend.NewConn, dest net.Addr, opts *Options) (*Pinger, error)
 	}
 
 	return &Pinger{
-		conn:    conn,
-		dest:    dest,
-		opts:    opts,
-		done:    make(chan any),
-		lastSeq: -1,
-		history: make([]PingResult, opts.history()),
+		conn: conn,
+		dest: dest,
+		opts: opts,
+		done: make(chan any),
+		hist: newHistory(opts.history()),
 	}, nil
 }
 
@@ -210,46 +186,26 @@ func (p *Pinger) Close() error {
 func (p *Pinger) Latest() PingResult {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.lastSeq == -1 {
-		return PingResult{}
-	}
-	return p.history[p.lastSeq%len(p.history)]
+	return p.hist.Latest()
 }
 
 // RevResults iterates over sequence#, result from newest to oldest.
 // Note: This locks the mutex for the lifetime of the iterator.
 func (p *Pinger) RevResults() iter.Seq2[int, PingResult] {
-	return func(yield func(k int, v PingResult) bool) {
-		p.mu.Lock()
-		defer p.mu.Unlock()
-		firstSeq := p.lastSeq - len(p.history) + 1
-		if firstSeq < 0 {
-			firstSeq = 0
-		}
-		for seq := p.lastSeq; seq >= firstSeq; seq-- {
-			if !yield(seq, p.history[seq%len(p.history)]) {
-				return
-			}
-		}
-	}
+	return p.hist.RevResults(&p.mu)
 }
 
 // History returns the ping history.
 // Deprecated: Use RevResults() and iterate.
 func (p *Pinger) History() []PingResult {
-	var res []PingResult
-	for _, r := range p.RevResults() {
-		res = append(res, r)
-	}
-	slices.Reverse(res)
-	return res
+	return p.hist.History(&p.mu)
 }
 
 // Stats returns ping statistics.
 func (p *Pinger) Stats() Stats {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.stats
+	return p.hist.Stats()
 }
 
 // Runs the callback (if any was given).
@@ -311,7 +267,7 @@ func (p *Pinger) sendLoop(sentSeqs chan<- int) {
 	ticker := time.NewTicker(p.opts.interval())
 	defer ticker.Stop()
 	pingsRemaining := p.opts.nPings()
-	nextSeq := 0
+	seq := 0
 	for {
 		select {
 		case <-ticker.C:
@@ -319,35 +275,30 @@ func (p *Pinger) sendLoop(sentSeqs chan<- int) {
 				return
 			}
 			pingsRemaining--
-			seq, err := p.sendPing(nextSeq)
+			err := p.sendPing(seq)
 			if err != nil {
 				log.Printf("Ping error; exiting send loop: %v", err)
 				return
 			}
 			sentSeqs <- seq
-			nextSeq = (nextSeq + 1) & sequenceNoMask
+			seq = (seq + 1) & sequenceNoMask
 		case <-p.done:
 			return
 		}
 	}
 }
 
-// Sends a ping; returns the sequence number of the sent ping.
-func (p *Pinger) sendPing(seq int) (int, error) {
+// Sends a ping.
+func (p *Pinger) sendPing(seq int) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	pkt := &backend.Packet{Seq: seq}
 	if err := p.conn.WriteTo(pkt, p.dest); err != nil {
-		return -1, fmt.Errorf("error pinging %v: %v", p.dest, err)
+		return fmt.Errorf("error pinging %v: %v", p.dest, err)
 	}
-	i := seq % len(p.history)
-	p.history[i] = PingResult{
-		Type: Waiting,
-		Time: time.Now(),
-	}
-	p.lastSeq = seq
-	return p.lastSeq, nil
+	p.hist.Add(seq)
+	return nil
 }
 
 // Receives pings and emits the results over the channel. Stops when conn is
@@ -367,58 +318,42 @@ func (p *Pinger) handleReply(pkt *backend.Packet, peer net.Addr) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.lastSeq-pkt.Seq >= len(p.history) {
-		log.Printf("Response too late to record in history: %v", pkt)
-		return
-	}
-	i := pkt.Seq % len(p.history)
+	res := p.hist.Get(pkt.Seq)
+	res.Peer = peer
 
-	p.history[i].Peer = peer
-
-	if t := p.history[i].Type; t != Waiting && t != Dropped {
+	if t := res.Type; t != Waiting && t != Dropped {
 		log.Printf("Duplicate packet: %v", pkt)
-		p.history[i].Type = Duplicate
-		p.runCallback(pkt.Seq, p.history[i])
+		res.Type = Duplicate
+		res = p.hist.Record(pkt.Seq, res)
+		p.runCallback(pkt.Seq, res)
 		return
 	}
 
-	p.history[i].Latency = time.Since(p.history[i].Time)
 	switch pkt.Type {
 	case backend.PacketRequest:
 		// This case should be filtered out by PingConnection.
 		log.Panicf("Unexpected packet request received: %v", pkt)
 	case backend.PacketReply:
-		p.history[i].Type = Success
+		res.Type = Success
 	case backend.PacketTimeExceeded:
-		p.history[i].Type = TTLExceeded
+		res.Type = TTLExceeded
 	case backend.PacketDestinationUnreachable:
-		p.history[i].Type = Unreachable
+		res.Type = Unreachable
 	}
 
-	if p.history[i].Type == Success {
-		p.stats.AvgLatency = (p.history[i].Latency + time.Duration(p.stats.N)*p.stats.AvgLatency) / time.Duration(p.stats.N+1)
-	} else {
-		p.stats.Failures++
-	}
-	p.stats.N++
-
-	p.runCallback(pkt.Seq, p.history[i])
+	res = p.hist.Record(pkt.Seq, res)
+	p.runCallback(pkt.Seq, res)
 }
 
 // Records a timeout if necessary.
 func (p *Pinger) maybeRecordTimeout(seq int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.lastSeq-seq >= len(p.history) {
-		log.Printf("Timeout for seq %d too late to record in history", seq)
+	res := p.hist.Get(seq)
+	if res.Type != Waiting {
 		return
 	}
-	i := seq % len(p.history)
-	if p.history[i].Type != Waiting {
-		return
-	}
-	p.history[i].Type = Dropped
-	p.stats.N++
-	p.stats.Failures++
-	p.runCallback(seq, p.history[i])
+	res.Type = Dropped
+	res = p.hist.Record(seq, res)
+	p.runCallback(seq, res)
 }
