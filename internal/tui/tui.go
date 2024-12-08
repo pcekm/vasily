@@ -41,6 +41,10 @@ func (o *Options) pingerOpts() *pinger.Options {
 	return o.PingerOpts
 }
 
+type updateRow struct {
+	table.RowKey
+}
+
 type traceStepMsg struct {
 	step tracer.Step
 	host string
@@ -86,7 +90,7 @@ func (m *Model) quitNicely() tea.Cmd {
 func (m *Model) Init() tea.Cmd {
 	log.SetOutput(m.log)
 	cmds := []tea.Cmd{
-		m.readNextRow(),
+		func() tea.Msg { return updateRow{RowKey: <-m.rowUpdates} },
 		m.log.Init(),
 	}
 	for _, h := range m.hosts {
@@ -114,8 +118,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.handleKeyMsg(msg))
 	case tea.WindowSizeMsg:
 		cmds = append(cmds, m.handleResize(msg))
-	case table.RowUpdated:
-		cmds = append(cmds, m.readNextRow())
+	case updateRow:
+		cmds = append(cmds, m.handleUpdateRow(msg))
 	case traceStepMsg:
 		cmds = append(cmds, m.updateTraceStep(msg))
 	case error:
@@ -124,9 +128,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m *Model) readNextRow() tea.Cmd {
+func (m *Model) handleUpdateRow(k updateRow) tea.Cmd {
+	m.table.UpdateRow(k.RowKey)
 	return func() tea.Msg {
-		return table.RowUpdated{Key: <-m.rowUpdates}
+		return updateRow{RowKey: <-m.rowUpdates}
 	}
 }
 
@@ -160,13 +165,13 @@ func (m *Model) startPingerCmd(key table.RowKey, target net.Addr) tea.Cmd {
 			return err
 		}
 		go ping.Run()
-		return table.AddRow{
-			Row: table.Row{
+		m.table.AddRow(
+			table.Row{
 				RowKey:      key,
 				DisplayHost: lookup.Addr(target),
 				Pinger:      ping,
-			},
-		}
+			})
+		return nil
 	}
 }
 

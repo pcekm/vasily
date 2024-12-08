@@ -146,18 +146,6 @@ func cmpRows(a, b Row) int {
 	return cmpRowKeys(a.RowKey, b.RowKey)
 }
 
-// AddRow is a message to add a new row.
-type AddRow struct {
-	// Row is the new row to add.
-	Row Row
-}
-
-// RowUpdated is a message that a row has been updated.
-type RowUpdated struct {
-	// Key is the row key that was updated.
-	Key RowKey
-}
-
 // RowKey uniquely identifies a row.
 type RowKey struct {
 	// Group is used to group related pings, such as all the hosts in a path.
@@ -193,12 +181,6 @@ func New() *Model {
 
 func (t *Model) Update(msg tea.Msg) tea.Cmd {
 	var cmds []tea.Cmd
-	switch msg := msg.(type) {
-	case AddRow:
-		cmds = append(cmds, t.handleAddRow(msg))
-	case RowUpdated:
-		cmds = append(cmds, t.handleRowUpdated(msg))
-	}
 	var vpCmd tea.Cmd
 	t.vp, vpCmd = t.vp.Update(msg)
 	cmds = append(cmds, vpCmd)
@@ -238,14 +220,15 @@ func (t *Model) recalcColumnWidths() {
 	}
 }
 
-func (t *Model) handleAddRow(ar AddRow) tea.Cmd {
-	t.rows = append(t.rows, ar.Row)
+// AddRow adds a new row.
+func (t *Model) AddRow(r Row) {
+	t.rows = append(t.rows, r)
 	slices.SortStableFunc(t.rows, cmpRows)
 	t.updateRows()
-	return nil
 }
 
-func (t *Model) handleRowUpdated(_ RowUpdated) tea.Cmd {
+// UpdateRow updates an existing row.
+func (t *Model) UpdateRow(r RowKey) tea.Cmd {
 	// TODO: Actually just update one row?
 	t.updateRows()
 	return nil
