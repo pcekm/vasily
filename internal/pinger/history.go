@@ -3,6 +3,7 @@ package pinger
 import (
 	"iter"
 	"log"
+	"math"
 	"slices"
 	"sync"
 	"time"
@@ -20,6 +21,9 @@ type Stats struct {
 
 	// AvgLatency is the average latency of successful pings.
 	AvgLatency time.Duration
+
+	// StdDev is the standard deviation of successful ping latencies.
+	StdDev time.Duration
 }
 
 // PacketLoss is the fraction of dropped packets.
@@ -32,6 +36,8 @@ type pingHistory struct {
 	//    i = seq % len(history)
 	history []PingResult
 	stats   Stats
+	// Intermediate value for calculating a streaming variance.
+	m2      time.Duration
 	len     int
 	lastSeq int
 	clock   clock.Clock
@@ -94,7 +100,10 @@ func (h *pingHistory) addStatsFor(r PingResult) {
 		return
 	}
 	n := time.Duration(h.stats.N - h.stats.Failures)
+	prevAvg := h.stats.AvgLatency
 	h.stats.AvgLatency = ((n-1)*h.stats.AvgLatency + r.Latency) / n
+	h.m2 = h.m2 + (r.Latency-prevAvg)*(r.Latency-h.stats.AvgLatency)
+	h.stats.StdDev = time.Duration(math.Sqrt(float64(h.m2) / float64(h.stats.N)))
 }
 
 // RevResults iterates over sequence#, result from newest to oldest.

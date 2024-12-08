@@ -35,6 +35,7 @@ const (
 	colHost
 	colResults
 	colAvgMs
+	colJitter
 	colPctLoss
 )
 
@@ -48,6 +49,8 @@ func (c columnID) String() string {
 		return "colResults"
 	case colAvgMs:
 		return "colAvgMs"
+	case colJitter:
+		return "colJitter"
 	case colPctLoss:
 		return "colPctLoss"
 	default:
@@ -72,6 +75,7 @@ var (
 		colHost:    {Title: "Host", Width: 1.0 / 3.0},
 		colResults: {Title: "Results", Width: 2.0 / 3.0},
 		colAvgMs:   {Title: "AvgMs", Width: 5},
+		colJitter:  {Title: "Jitter", Width: 6},
 		colPctLoss: {Title: " Loss", Width: 5},
 	}
 
@@ -142,7 +146,8 @@ func (r Row) View(cols []columnSpec, chartWidth int) string {
 		render(1, r.DisplayHost),
 		render(2, r.latencyChart(chartWidth)),
 		render(3, fmt.Sprintf("%5d", st.AvgLatency.Milliseconds())),
-		render(4, fmt.Sprintf("%4.0f%%", 100*st.PacketLoss())),
+		render(4, fmt.Sprintf("%6d", st.StdDev.Milliseconds())),
+		render(5, fmt.Sprintf("%4.0f%%", 100*st.PacketLoss())),
 	}
 	return strings.Join(views, "")
 }

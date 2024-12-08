@@ -72,6 +72,7 @@ func TestStats(t *testing.T) {
 		N:          4,
 		Failures:   2,
 		AvgLatency: 15 * time.Millisecond,
+		StdDev:     5 * time.Millisecond,
 	}
 
 	if diff := cmp.Diff(want, h.Stats()); diff != "" {
@@ -103,9 +104,13 @@ func TestStats_Overflow(t *testing.T) {
 		N:          5,
 		Failures:   2,
 		AvgLatency: 40 * time.Millisecond,
+		StdDev:     6 * time.Millisecond,
 	}
 
-	if diff := cmp.Diff(want, h.Stats()); diff != "" {
+	opt := cmp.Transformer("Duration", func(in time.Duration) int64 {
+		return in.Milliseconds()
+	})
+	if diff := cmp.Diff(want, h.Stats(), opt); diff != "" {
 		t.Errorf("Wrong stats (-want, +got):\n%v", diff)
 	}
 }
