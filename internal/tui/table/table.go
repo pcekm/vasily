@@ -5,8 +5,10 @@ package table
 import (
 	"cmp"
 	"fmt"
+	"io"
 	"math"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -60,23 +62,28 @@ func (c columnID) String() string {
 
 // Describes a column.
 type columnSpec struct {
+	// ID is the column ID.
+	ID columnID
+
 	// Title is the title displayed at the top of the column.
 	Title string
 
-	// Width may be int or float64. If int, the column will be exactly
-	// that wide. If float64, the column will take up that fraction of the
-	// remaining space on the line. The fractions should probably add to 1.0.
-	Width any
+	// FixedWidth is fixed width for the column.
+	FixedWidth int
+
+	// ProportionalWidth, if nonzero, is the proportion of the available space
+	// this column will use. (Minus the fixed width columns.)
+	ProportionalWidth float64
 }
 
 var (
-	columnSpecs = map[columnID]columnSpec{
-		colIndex:   {Title: "Hop", Width: 3},
-		colHost:    {Title: "Host", Width: 1.0 / 3.0},
-		colResults: {Title: "Results", Width: 2.0 / 3.0},
-		colAvgMs:   {Title: "AvgMs", Width: 5},
-		colJitter:  {Title: "Jitter", Width: 6},
-		colPctLoss: {Title: " Loss", Width: 5},
+	columnSpecs = []columnSpec{
+		{ID: colIndex, Title: "Hop", FixedWidth: 3},
+		{ID: colHost, Title: "Host", ProportionalWidth: 2},
+		{ID: colResults, Title: "Results", ProportionalWidth: 3},
+		{ID: colAvgMs, Title: "AvgMs", FixedWidth: 5},
+		{ID: colJitter, Title: "Jitter", FixedWidth: 6},
+		{ID: colPctLoss, Title: " Loss", FixedWidth: 5},
 	}
 
 	headerStyle = lipgloss.NewStyle().
@@ -123,56 +130,16 @@ type Row struct {
 	Pinger *pinger.Pinger
 }
 
-// View returns views for each cell in the table row.
-func (r Row) View(cols []columnSpec, chartWidth int) string {
+func (r Row) cells() map[columnID]any {
 	st := r.Pinger.Stats()
-	idx := "-"
-	if r.Index != 0 {
-		idx = fmt.Sprintf("%2d.", r.Index)
+	return map[columnID]any{
+		colIndex:   r.Index,
+		colHost:    r.DisplayHost,
+		colResults: r.Pinger,
+		colAvgMs:   st.AvgLatency,
+		colJitter:  st.StdDev,
+		colPctLoss: 100 * st.PacketLoss(),
 	}
-	render := func(i int, s string) string {
-		width := cols[i].Width.(int)
-		if columnID(i) == colResults {
-		}
-		if lipgloss.Width(s) > width {
-			s = s[:width-1] + "…"
-		}
-		return cellStyle.
-			Width(width + cellStyle.GetHorizontalPadding()).
-			Render(s)
-	}
-	views := []string{
-		render(0, idx),
-		render(1, r.DisplayHost),
-		render(2, r.latencyChart(chartWidth)),
-		render(3, fmt.Sprintf("%5d", st.AvgLatency.Milliseconds())),
-		render(4, fmt.Sprintf("%6d", st.StdDev.Milliseconds())),
-		render(5, fmt.Sprintf("%4.0f%%", 100*st.PacketLoss())),
-	}
-	return strings.Join(views, "")
-}
-
-func (r Row) latencyChart(chartWidth int) string {
-	chars := make([]string, chartWidth)
-	i := 0
-	for _, r := range r.Pinger.RevResults() {
-		frac := math.Min(1, float64(r.Latency)/float64(graphMax))
-		barIdx := int(frac * float64(len(bars)-1))
-		c := latencyColors[barIdx].Render(bars[barIdx])
-		if r.Type != pinger.Success {
-			c = statuses[r.Type]
-			if r.Type != pinger.Waiting {
-				c = statusErrStyle.Render(c)
-			}
-		}
-		charIdx := chartWidth - i - 1
-		if charIdx < 0 {
-			break
-		}
-		chars[charIdx] = c
-		i++
-	}
-	return strings.Join(chars, "")
 }
 
 func cmpRows(a, b Row) int {
@@ -211,25 +178,16 @@ func cmpRowKeys(a, b RowKey) int {
 
 // Model contains the table information.
 type Model struct {
-	ready          bool
-	vp             viewport.Model
-	fixedWidth     int
-	latencyColumns int
-	columns        []columnSpec
-	rows           []Row
+	ready     bool
+	vp        viewport.Model
+	colWidths []int
+	rows      []Row
 }
 
 // New makes an empty ping result table with headers.
 func New() *Model {
-	// Add up all fixed space.
-	fixedWidth := 2 * horizontalPadding * len(columnSpecs) // Each column has horizontalPadding fore and aft
-	for _, c := range columnSpecs {
-		if w, ok := c.Width.(int); ok {
-			fixedWidth += w
-		}
-	}
 	return &Model{
-		fixedWidth: fixedWidth,
+		colWidths: make([]int, len(columnSpecs)),
 	}
 }
 
@@ -251,23 +209,31 @@ func (t *Model) Update(msg tea.Msg) tea.Cmd {
 // anything to be displayed.
 func (t *Model) SetSize(width, height int) {
 	if !t.ready {
-		t.columns = make([]columnSpec, len(columnSpecs))
 		t.vp = viewport.New(width, height-1)
 		t.ready = true
 	}
 	t.vp.Width = width
 	t.vp.Height = height - 1
-	availSpace := float64(width - t.fixedWidth)
-	for id, spec := range columnSpecs {
-		t.columns[id] = spec
-		switch w := spec.Width.(type) {
-		case int:
-			t.columns[id].Width = w
-		case float64:
-			t.columns[id].Width = int(math.Round(math.Max(minColWidth, w*availSpace)))
+	t.recalcColumnWidths()
+}
+
+func (t *Model) recalcColumnWidths() {
+	fixedTot := 0
+	propTot := 0.0
+	for _, c := range columnSpecs {
+		fixedTot += cellStyle.GetHorizontalPadding()
+		if c.FixedWidth != 0 {
+			fixedTot += c.FixedWidth
+		} else {
+			propTot += c.ProportionalWidth
 		}
-		if id == colResults {
-			t.latencyColumns = t.columns[id].Width.(int)
+	}
+	avail := float64(t.vp.Width - fixedTot)
+	for i, c := range columnSpecs {
+		if c.FixedWidth != 0 {
+			t.colWidths[i] = c.FixedWidth
+		} else {
+			t.colWidths[i] = int(math.Round(c.ProportionalWidth / propTot * avail))
 		}
 	}
 }
@@ -291,18 +257,87 @@ func (t *Model) updateRows() {
 	}
 	lines := make([]string, len(t.rows))
 	for i, r := range t.rows {
-		lines[i] = r.View(t.columns, t.latencyColumns)
+		lines[i] = t.renderRow(r)
 	}
 	t.vp.SetContent(strings.Join(lines, "\n"))
 }
 
-func (t *Model) headerView() string {
-	titles := make([]string, len(t.columns))
-	for i, c := range t.columns {
-		width, _ := c.Width.(int)
-		titles[i] = headerStyle.Width(width + 2*horizontalPadding).Render(c.Title)
+// Left-pads s out to i spaces. Enough spaces will be added to the left of s to make
+// it at least length i.
+func lpad(i int, s string) string {
+	n := i - len(s)
+	if n < 0 {
+		return s[:i-1] + "…"
 	}
-	return strings.Join(titles, "")
+	return strings.Repeat(" ", n) + s
+}
+
+// Right-pads s out to i spaces. Enough spaces will be added to the left of s to make
+// it at least length i.
+func rpad(i int, s string) string {
+	n := i - len(s)
+	if n < 0 {
+		return s[:i-1] + "…"
+	}
+	return s + strings.Repeat(" ", n)
+}
+
+func (t *Model) renderRow(r Row) string {
+	cells := r.cells()
+	var sb strings.Builder
+	for i, c := range columnSpecs {
+		t.renderCell(cells[c.ID], t.colWidths[i], &sb)
+	}
+	return sb.String()
+}
+
+func (t *Model) renderCell(v any, width int, out io.StringWriter) {
+	var s string
+	switch v := v.(type) {
+	case string:
+		s = rpad(width, v)
+	case time.Duration:
+		s = lpad(width, strconv.FormatInt(v.Milliseconds(), 10))
+	case int:
+		s = lpad(width, strconv.Itoa(v))
+	case float64:
+		s = lpad(width, fmt.Sprintf("%.0f%%", v))
+	case *pinger.Pinger:
+		s = t.renderLatencies(width, v)
+	}
+	out.WriteString(cellStyle.Width(width + cellStyle.GetHorizontalPadding()).Render(s))
+}
+
+func (t *Model) renderLatencies(width int, p *pinger.Pinger) string {
+	chars := make([]string, width)
+	i := 0
+	for _, r := range p.RevResults() {
+		frac := math.Min(1, float64(r.Latency)/float64(graphMax))
+		barIdx := int(frac * float64(len(bars)-1))
+		c := latencyColors[barIdx].Render(bars[barIdx])
+		if r.Type != pinger.Success {
+			c = statuses[r.Type]
+			if r.Type != pinger.Waiting {
+				c = statusErrStyle.Render(c)
+			}
+		}
+		charIdx := width - i - 1
+		if charIdx < 0 {
+			break
+		}
+		chars[charIdx] = c
+		i++
+	}
+	return strings.Join(chars, "")
+}
+
+func (t *Model) headerView() string {
+	var sb strings.Builder
+	for i, c := range columnSpecs {
+		width := t.colWidths[i]
+		sb.WriteString(headerStyle.Width(width + 2*horizontalPadding).Render(rpad(width, c.Title)))
+	}
+	return sb.String()
 }
 
 func (t *Model) View() string {
