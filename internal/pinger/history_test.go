@@ -100,8 +100,8 @@ func TestStats_Overflow(t *testing.T) {
 	addIncRec(4, 50, Success)
 
 	want := Stats{
-		N:          4,
-		Failures:   1,
+		N:          5,
+		Failures:   2,
 		AvgLatency: 40 * time.Millisecond,
 	}
 

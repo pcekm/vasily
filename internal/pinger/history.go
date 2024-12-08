@@ -78,16 +78,23 @@ func (h *pingHistory) Record(seq int, r PingResult) PingResult {
 		return r
 	}
 	i := seq % len(h.history)
-	if r.Type != Duplicate && seq >= len(h.history) {
-		// Remove the result that's about to be overwritten.
-		h.removeStatsFor(i)
-	}
 	r.Latency = h.clock.Since(r.Time)
 	h.history[i] = r
 	if r.Type != Duplicate {
 		h.addStatsFor(r)
 	}
 	return r
+}
+
+// Adds stats for a new record.
+func (h *pingHistory) addStatsFor(r PingResult) {
+	h.stats.N++
+	if r.Type != Success {
+		h.stats.Failures++
+		return
+	}
+	n := time.Duration(h.stats.N - h.stats.Failures)
+	h.stats.AvgLatency = ((n-1)*h.stats.AvgLatency + r.Latency) / n
 }
 
 // RevResults iterates over sequence#, result from newest to oldest.
@@ -117,28 +124,6 @@ func (h *pingHistory) History(mu *sync.Mutex) []PingResult {
 	}
 	slices.Reverse(res)
 	return res
-}
-
-// Adds stats for a new record.
-func (h *pingHistory) addStatsFor(r PingResult) {
-	h.stats.N++
-	if r.Type != Success {
-		h.stats.Failures++
-		return
-	}
-	n := time.Duration(h.stats.N - h.stats.Failures)
-	h.stats.AvgLatency = ((n-1)*h.stats.AvgLatency + r.Latency) / n
-}
-
-// Removes the stats for the record at i.
-func (h *pingHistory) removeStatsFor(i int) {
-	h.stats.N--
-	if h.history[i].Type != Success {
-		h.stats.Failures -= 1
-		return
-	}
-	n := time.Duration(h.stats.N - h.stats.Failures)
-	h.stats.AvgLatency = ((n+1)*h.stats.AvgLatency - h.history[i].Latency) / n
 }
 
 // Latest returns the most recent ping result or the zero result if no results
