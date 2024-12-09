@@ -9,7 +9,8 @@ import (
 
 var (
 	shortBoxStyle = lipgloss.NewStyle().
-			Padding(0, 1)
+			Padding(0, 1).
+			AlignHorizontal(lipgloss.Right)
 	fullBoxStyle = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder(), true).
 			Padding(0, 1)
