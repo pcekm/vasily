@@ -36,7 +36,7 @@ type Step struct {
 
 // TraceRoute finds the path to a host. Steps in the path will be returned one at a
 // time over the channel. The channel will be closed when the trace completes.
-// Steps not be returned in any order or not at all.
+// Steps may be returned in any order or not at all.
 func TraceRoute(newConn backend.NewConn, dest net.Addr, res chan<- Step) error {
 	defer close(res)
 	conn, err := newConn()
@@ -46,15 +46,15 @@ func TraceRoute(newConn backend.NewConn, dest net.Addr, res chan<- Step) error {
 	pkt := &backend.Packet{
 		Seq: 0,
 	}
+	seen := make(map[string]bool)
 	done := false
 	tick := time.Tick(probePeriod)
-	for i := 1; !done && i < maxTTL; i++ {
-		seen := make(map[string]bool)
-		for j := 0; j < maxTries; j++ {
+	for tryNum := 0; tryNum < maxTries; tryNum++ {
+		for ttl := 1; !done && ttl < maxTTL; ttl++ {
 			if tick != nil {
 				<-tick
 			}
-			if err := conn.WriteTo(pkt, dest, backend.TTLOption{TTL: i}); err != nil {
+			if err := conn.WriteTo(pkt, dest, backend.TTLOption{TTL: ttl}); err != nil {
 				return fmt.Errorf("error sending ping: %v", err)
 			}
 			pkt.Seq++
@@ -69,12 +69,12 @@ func TraceRoute(newConn backend.NewConn, dest net.Addr, res chan<- Step) error {
 				return fmt.Errorf("destination unreachable: %v", peer)
 			}
 
-			k := peer.String()
+			k := fmt.Sprintf("%d:%v", ttl, peer.String())
 			if seen[k] {
 				continue
 			}
 			seen[k] = true
-			res <- Step{Pos: i, Host: peer}
+			res <- Step{Pos: ttl, Host: peer}
 			if recvPkt.Type == backend.PacketReply {
 				done = true
 			}
