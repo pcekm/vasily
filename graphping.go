@@ -17,9 +17,8 @@ import (
 
 // Flags.
 var (
-	listenAddr = pflag.StringP("source", "S", "", "Source address.")
-	pingPath   = pflag.Bool("path", false, "Ping complete path.")
-	logfile    = pflag.String("logfile", "/dev/null", "File to output logs.")
+	pingPath = pflag.Bool("path", false, "Ping complete path.")
+	logfile  = pflag.String("logfile", "/dev/null", "File to output logs.")
 )
 
 // FlagVars.

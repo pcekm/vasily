@@ -11,10 +11,6 @@ var defaultKeyMap = keyMap{
 		key.WithKeys("ctrl+z"),
 		key.WithHelp("ctrl+z", "suspend"),
 	),
-	Log: key.NewBinding(
-		key.WithKeys("l"),
-		key.WithHelp("l", "toggle log"),
-	),
 	Help: key.NewBinding(
 		key.WithKeys("f1", "h"),
 		key.WithHelp("h", "help"),
@@ -24,12 +20,11 @@ var defaultKeyMap = keyMap{
 type keyMap struct {
 	Quit    key.Binding
 	Suspend key.Binding
-	Log     key.Binding
 	Help    key.Binding
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{{k.Help, k.Log, k.Quit}}
+	return [][]key.Binding{{k.Help, k.Quit}}
 }
 
 func (k keyMap) ShortHelp() []key.Binding {

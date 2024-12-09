@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -16,11 +15,8 @@ import (
 	"github.com/pcekm/graphping/internal/pinger"
 	"github.com/pcekm/graphping/internal/tracer"
 	"github.com/pcekm/graphping/internal/tui/help"
-	"github.com/pcekm/graphping/internal/tui/logwindow"
 	"github.com/pcekm/graphping/internal/tui/table"
 )
-
-const logHeight = 10
 
 // Options contain main program options.
 type Options struct {
@@ -62,8 +58,6 @@ type Model struct {
 	connV6     backend.NewConn
 	hosts      []string
 	rowUpdates chan table.RowKey
-	log        *logwindow.Model
-	showLog    bool
 	help       *help.Model
 	fullHelp   bool
 	helpRow    int
@@ -79,26 +73,16 @@ func New(connV4, connV6 backend.NewConn, hosts []string, opts *Options) (*Model,
 		connV6:     connV6,
 		hosts:      hosts,
 		rowUpdates: make(chan table.RowKey),
-		log:        logwindow.New(),
 		help:       help.New(defaultKeyMap),
 		opts:       opts,
 	}
 	return m, nil
 }
 
-func (m *Model) quitNicely() tea.Cmd {
-	return func() tea.Msg {
-		log.SetOutput(os.Stderr)
-		return tea.QuitMsg{}
-	}
-}
-
 // Init initializes the model.
 func (m *Model) Init() tea.Cmd {
-	log.SetOutput(m.log)
 	cmds := []tea.Cmd{
 		func() tea.Msg { return updateRow{RowKey: <-m.rowUpdates} },
-		m.log.Init(),
 		m.help.Init(),
 	}
 	for _, h := range m.hosts {
@@ -119,7 +103,6 @@ func (m *Model) Init() tea.Cmd {
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds := []tea.Cmd{
 		m.table.Update(msg),
-		m.log.Update(msg),
 		m.help.Update(msg),
 	}
 	switch msg := msg.(type) {
@@ -227,11 +210,9 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 	}
 	switch {
 	case key.Matches(msg, defaultKeyMap.Quit):
-		add(m.quitNicely())
+		add(tea.Quit)
 	case key.Matches(msg, defaultKeyMap.Suspend):
 		add(tea.Suspend)
-	case key.Matches(msg, defaultKeyMap.Log):
-		add(m.toggleLog())
 	}
 
 	// Help is dismissed on any keypress.
@@ -244,12 +225,6 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-func (m *Model) toggleLog() tea.Cmd {
-	m.showLog = !m.showLog
-	m.updateSizes()
-	return nil
-}
-
 func (m *Model) setFullHelp(b bool) tea.Cmd {
 	m.fullHelp = b
 	m.help.SetFullHelp(b)
@@ -260,12 +235,7 @@ func (m *Model) setFullHelp(b bool) tea.Cmd {
 func (m *Model) updateSizes() {
 	m.help.SetWidth(m.width)
 	helpHeight := m.help.GetHeight()
-	if m.showLog {
-		m.table.SetSize(m.width, m.height-logHeight-helpHeight)
-		m.log.SetSize(m.width, logHeight)
-	} else {
-		m.table.SetSize(m.width, m.height-helpHeight)
-	}
+	m.table.SetSize(m.width, m.height-helpHeight)
 }
 
 func (m *Model) handleResize(msg tea.WindowSizeMsg) tea.Cmd {
@@ -277,11 +247,5 @@ func (m *Model) handleResize(msg tea.WindowSizeMsg) tea.Cmd {
 
 // View renders the model.
 func (m *Model) View() string {
-	var res []string
-	res = append(res, m.table.View())
-	if m.showLog {
-		res = append(res, m.log.View())
-	}
-	res = append(res, m.help.View())
-	return lipgloss.JoinVertical(lipgloss.Top, res...)
+	return lipgloss.JoinVertical(lipgloss.Top, m.table.View(), m.help.View())
 }
