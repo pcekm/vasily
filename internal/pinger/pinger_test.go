@@ -5,7 +5,6 @@ import (
 	"log"
 	"net"
 	"runtime"
-	"sync"
 	"testing"
 	"time"
 
@@ -45,17 +44,10 @@ func TestLive(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skipf("Unsupported OS")
 	}
-	var mu sync.Mutex
-	callbackRes := make([]PingResult, 10)
 	opts := &Options{
-		NPings:   10,
+		NPings:   3,
 		Interval: time.Millisecond,
-		History:  10,
-		Callback: func(seq int, res PingResult) {
-			mu.Lock()
-			defer mu.Unlock()
-			callbackRes[seq] = res
-		},
+		History:  3,
 	}
 	p, err := New(func() (backend.Conn, error) { return icmp.New(util.IPv4) }, test.LoopbackV4, opts)
 	if err != nil {
@@ -67,58 +59,14 @@ func TestLive(t *testing.T) {
 		t.Errorf("Error closing pinger: %v", err)
 	}
 
-	mu.Lock()
-	defer mu.Unlock()
-	if diff := cmp.Diff(callbackRes, p.History()); diff != "" {
-		t.Errorf("Callbacks received don't match call to History (-callbacks, +history):\n%v", diff)
-	}
-}
-
-func TestCallbacks(t *testing.T) {
-	addr := test.LoopbackV4
-	ctrl := gomock.NewController(t)
-	conn := test.NewMockConn(ctrl)
-	pe := test.NewPingExchange(0)
-	conn.MockPingExchange(pe)
-	pe = test.NewPingExchange(1)
-	conn.MockPingExchange(pe)
-	conn.MockClose()
-
-	var mu sync.Mutex
-	var callbacks []PingResult
-	opts := &Options{
-		NPings:   2,
-		Interval: time.Microsecond,
-		History:  2,
-		Timeout:  time.Millisecond,
-		Callback: func(seq int, res PingResult) {
-			mu.Lock()
-			defer mu.Unlock()
-			callbacks = append(callbacks, res)
-		},
-	}
-	p, err := New(newConnFunc(conn), addr, opts)
-	if err != nil {
-		t.Fatalf("Error creating pinger: %v", err)
-	}
-	if !test.WithTimeout(p.Run, time.Second) {
-		t.Error("Timed out waiting for pinger completion.")
-	}
-	if err := p.Close(); err != nil {
-		t.Errorf("Error closing pinger: %v", err)
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
 	want := []PingResult{
 		{Type: Success, Peer: test.LoopbackV4},
 		{Type: Success, Peer: test.LoopbackV4},
+		{Type: Success, Peer: test.LoopbackV4},
 	}
-	if diff := diffPingResults(want, callbacks); diff != "" {
-		t.Errorf("Callbacks produced wrong result types (-want, +got):\n%v", diff)
+	if diff := diffPingResults(want, p.History()); diff != "" {
+		t.Errorf("Wrong history (-want, +got):\n%v", diff)
 	}
-
-	ctrl.Finish()
 }
 
 func TestPacketLoss(t *testing.T) {

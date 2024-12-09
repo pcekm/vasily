@@ -20,9 +20,6 @@ const (
 	sequenceNoMask = (1 << 16) - 1
 )
 
-// CallbackFunc is the signature for callback functions.
-type CallbackFunc func(seq int, result PingResult)
-
 // Options contains options for the pinger.
 type Options struct {
 	// NPings is the number of pings to send. Zero means infinite.
@@ -37,10 +34,6 @@ type Options struct {
 	// Timeout is the maximum amount of time to wait before assuming no response
 	// is coming. Defaults to 1s if unset.
 	Timeout time.Duration
-
-	// Callback is a function that gets called anytime a new result is
-	// available.
-	Callback CallbackFunc
 }
 
 func (o *Options) nPings() int {
@@ -69,13 +62,6 @@ func (o *Options) timeout() time.Duration {
 		return time.Second
 	}
 	return o.Timeout
-}
-
-func (o *Options) callback() CallbackFunc {
-	if o == nil || o.Callback == nil {
-		return func(int, PingResult) {}
-	}
-	return o.Callback
 }
 
 // ResultType is the type of reply received. This is a high-level view. More
@@ -208,11 +194,6 @@ func (p *Pinger) Stats() Stats {
 	return p.hist.Stats()
 }
 
-// Runs the callback (if any was given).
-func (p *Pinger) runCallback(seq int, result PingResult) {
-	go p.opts.callback()(seq, result)
-}
-
 func (p *Pinger) afterNextTimeout(timeouts *list.List) <-chan time.Time {
 	fr := timeouts.Front()
 	if fr == nil {
@@ -325,7 +306,6 @@ func (p *Pinger) handleReply(pkt *backend.Packet, peer net.Addr) {
 		log.Printf("Duplicate packet: %v", pkt)
 		res.Type = Duplicate
 		res = p.hist.Record(pkt.Seq, res)
-		p.runCallback(pkt.Seq, res)
 		return
 	}
 
@@ -342,7 +322,6 @@ func (p *Pinger) handleReply(pkt *backend.Packet, peer net.Addr) {
 	}
 
 	res = p.hist.Record(pkt.Seq, res)
-	p.runCallback(pkt.Seq, res)
 }
 
 // Records a timeout if necessary.
@@ -355,5 +334,4 @@ func (p *Pinger) maybeRecordTimeout(seq int) {
 	}
 	res.Type = Dropped
 	res = p.hist.Record(seq, res)
-	p.runCallback(seq, res)
 }
