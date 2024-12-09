@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -39,9 +40,7 @@ func (o *Options) pingerOpts() *pinger.Options {
 	return o.PingerOpts
 }
 
-type updateRow struct {
-	table.RowKey
-}
+type updateRows struct{}
 
 type traceStepMsg struct {
 	step tracer.Step
@@ -51,30 +50,28 @@ type traceStepMsg struct {
 
 // Model is the main text UI model.
 type Model struct {
-	width      int
-	height     int
-	table      *table.Model
-	connV4     backend.NewConn
-	connV6     backend.NewConn
-	hosts      []string
-	rowUpdates chan table.RowKey
-	help       *help.Model
-	fullHelp   bool
-	helpRow    int
-	helpCol    int
-	opts       *Options
+	width    int
+	height   int
+	table    *table.Model
+	connV4   backend.NewConn
+	connV6   backend.NewConn
+	hosts    []string
+	help     *help.Model
+	fullHelp bool
+	helpRow  int
+	helpCol  int
+	opts     *Options
 }
 
 // New creates a new model.
 func New(connV4, connV6 backend.NewConn, hosts []string, opts *Options) (*Model, error) {
 	m := &Model{
-		table:      table.New(),
-		connV4:     connV4,
-		connV6:     connV6,
-		hosts:      hosts,
-		rowUpdates: make(chan table.RowKey),
-		help:       help.New(defaultKeyMap),
-		opts:       opts,
+		table:  table.New(),
+		connV4: connV4,
+		connV6: connV6,
+		hosts:  hosts,
+		help:   help.New(defaultKeyMap),
+		opts:   opts,
 	}
 	return m, nil
 }
@@ -82,7 +79,7 @@ func New(connV4, connV6 backend.NewConn, hosts []string, opts *Options) (*Model,
 // Init initializes the model.
 func (m *Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
-		func() tea.Msg { return updateRow{RowKey: <-m.rowUpdates} },
+		m.updateRows(updateRows{}),
 		m.help.Init(),
 	}
 	for _, h := range m.hosts {
@@ -110,21 +107,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.handleKeyMsg(msg))
 	case tea.WindowSizeMsg:
 		cmds = append(cmds, m.handleResize(msg))
-	case updateRow:
-		cmds = append(cmds, m.handleUpdateRow(msg))
 	case traceStepMsg:
 		cmds = append(cmds, m.updateTraceStep(msg))
+	case updateRows:
+		cmds = append(cmds, m.updateRows(msg))
 	case error:
 		log.Print(msg)
 	}
 	return m, tea.Batch(cmds...)
-}
-
-func (m *Model) handleUpdateRow(k updateRow) tea.Cmd {
-	m.table.UpdateRow(k.RowKey)
-	return func() tea.Msg {
-		return updateRow{RowKey: <-m.rowUpdates}
-	}
 }
 
 func (m *Model) connFuncForAddr(addr net.Addr) backend.NewConn {
@@ -148,11 +138,7 @@ func (m *Model) connFuncForAddr(addr net.Addr) backend.NewConn {
 // Returns a command that starts running a new ping.
 func (m *Model) startPingerCmd(key table.RowKey, target net.Addr) tea.Cmd {
 	return func() tea.Msg {
-		opts := *m.opts.pingerOpts()
-		opts.Callback = func(int, pinger.PingResult) {
-			m.rowUpdates <- key
-		}
-		ping, err := pinger.New(m.connFuncForAddr(target), target, &opts)
+		ping, err := pinger.New(m.connFuncForAddr(target), target, nil)
 		if err != nil {
 			return err
 		}
@@ -201,6 +187,13 @@ func (m *Model) updateTraceStep(msg traceStepMsg) tea.Cmd {
 		m.startPingerCmd(table.RowKey{Index: msg.step.Pos, Group: msg.host}, msg.step.Host),
 		m.nextTraceCmd(msg.host, msg.next),
 	)
+}
+
+func (m *Model) updateRows(updateRows) tea.Cmd {
+	m.table.UpdateRows()
+	return tea.Tick(time.Second, func(time.Time) tea.Msg {
+		return updateRows{}
+	})
 }
 
 func (m *Model) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {

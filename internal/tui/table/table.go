@@ -224,17 +224,11 @@ func (t *Model) recalcColumnWidths() {
 func (t *Model) AddRow(r Row) {
 	t.rows = append(t.rows, r)
 	slices.SortStableFunc(t.rows, cmpRows)
-	t.updateRows()
+	t.UpdateRows()
 }
 
-// UpdateRow updates an existing row.
-func (t *Model) UpdateRow(r RowKey) tea.Cmd {
-	// TODO: Actually just update one row?
-	t.updateRows()
-	return nil
-}
-
-func (t *Model) updateRows() {
+// UpdateRows updates all of the rows in the table with the latest ping data.
+func (t *Model) UpdateRows() {
 	if !t.ready {
 		return
 	}
