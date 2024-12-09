@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-func checkSetuid() {
+func usePrivsep() bool {
 	if os.Getuid() != os.Geteuid() {
 		fmt.Fprintf(os.Stderr, `Error: running with setuid.
 
@@ -18,4 +18,6 @@ using something like:
 `, os.Args[0])
 		os.Exit(1)
 	}
+
+	return false
 }

@@ -96,7 +96,9 @@ var (
 )
 
 func Initialize() func() {
-	checkSetuid()
+	if !usePrivsep() {
+		return func() {}
+	}
 
 	if len(os.Args) == 2 && os.Args[1] == startPrivFlag {
 		log.Printf("Starting privileged server.")
