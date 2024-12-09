@@ -327,5 +327,5 @@ func (t *Model) View() string {
 	if !t.ready {
 		return ""
 	}
-	return t.headerView() + "\n" + t.vp.View()
+	return lipgloss.JoinVertical(lipgloss.Top, t.headerView(), t.vp.View())
 }

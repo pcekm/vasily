@@ -6,14 +6,16 @@ import (
 	"log"
 	"net"
 	"os"
-	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/lookup"
 	"github.com/pcekm/graphping/internal/pinger"
 	"github.com/pcekm/graphping/internal/tracer"
+	"github.com/pcekm/graphping/internal/tui/help"
 	"github.com/pcekm/graphping/internal/tui/logwindow"
 	"github.com/pcekm/graphping/internal/tui/table"
 )
@@ -62,6 +64,10 @@ type Model struct {
 	rowUpdates chan table.RowKey
 	log        *logwindow.Model
 	showLog    bool
+	help       *help.Model
+	fullHelp   bool
+	helpRow    int
+	helpCol    int
 	opts       *Options
 }
 
@@ -74,6 +80,7 @@ func New(connV4, connV6 backend.NewConn, hosts []string, opts *Options) (*Model,
 		hosts:      hosts,
 		rowUpdates: make(chan table.RowKey),
 		log:        logwindow.New(),
+		help:       help.New(defaultKeyMap),
 		opts:       opts,
 	}
 	return m, nil
@@ -92,6 +99,7 @@ func (m *Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
 		func() tea.Msg { return updateRow{RowKey: <-m.rowUpdates} },
 		m.log.Init(),
+		m.help.Init(),
 	}
 	for _, h := range m.hosts {
 		addr, err := lookup.String(h)
@@ -112,6 +120,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds := []tea.Cmd{
 		m.table.Update(msg),
 		m.log.Update(msg),
+		m.help.Update(msg),
 	}
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -212,15 +221,27 @@ func (m *Model) updateTraceStep(msg traceStepMsg) tea.Cmd {
 }
 
 func (m *Model) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
-	switch msg.String() {
-	case "l":
-		return m.toggleLog()
-	case "ctrl+c", "q":
-		return m.quitNicely()
-	case "ctrl+z":
-		return tea.Suspend
+	var cmds []tea.Cmd
+	add := func(cmd tea.Cmd) {
+		cmds = append(cmds, cmd)
 	}
-	return nil
+	switch {
+	case key.Matches(msg, defaultKeyMap.Quit):
+		add(m.quitNicely())
+	case key.Matches(msg, defaultKeyMap.Suspend):
+		add(tea.Suspend)
+	case key.Matches(msg, defaultKeyMap.Log):
+		add(m.toggleLog())
+	}
+
+	// Help is dismissed on any keypress.
+	if key.Matches(msg, defaultKeyMap.Help) {
+		add(m.setFullHelp(!m.fullHelp))
+	} else if m.fullHelp {
+		add(m.setFullHelp(false))
+	}
+
+	return tea.Batch(cmds...)
 }
 
 func (m *Model) toggleLog() tea.Cmd {
@@ -229,12 +250,21 @@ func (m *Model) toggleLog() tea.Cmd {
 	return nil
 }
 
+func (m *Model) setFullHelp(b bool) tea.Cmd {
+	m.fullHelp = b
+	m.help.SetFullHelp(b)
+	m.updateSizes()
+	return nil
+}
+
 func (m *Model) updateSizes() {
+	m.help.SetWidth(m.width)
+	helpHeight := m.help.GetHeight()
 	if m.showLog {
-		m.table.SetSize(m.width, m.height-logHeight)
+		m.table.SetSize(m.width, m.height-logHeight-helpHeight)
 		m.log.SetSize(m.width, logHeight)
 	} else {
-		m.table.SetSize(m.width, m.height)
+		m.table.SetSize(m.width, m.height-helpHeight)
 	}
 }
 
@@ -252,5 +282,6 @@ func (m *Model) View() string {
 	if m.showLog {
 		res = append(res, m.log.View())
 	}
-	return strings.Join(res, "\n")
+	res = append(res, m.help.View())
+	return lipgloss.JoinVertical(lipgloss.Top, res...)
 }
