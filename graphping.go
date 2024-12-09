@@ -4,8 +4,10 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/pflag"
@@ -15,10 +17,14 @@ import (
 	"github.com/pcekm/graphping/internal/tui"
 )
 
+const maxPingInterval = time.Second
+
 // Flags.
 var (
-	pingPath = pflag.Bool("path", false, "Ping complete path.")
-	logfile  = pflag.String("logfile", "/dev/null", "File to output logs.")
+	pingPath     = pflag.Bool("path", false, "Ping complete path.")
+	logfile      = pflag.String("logfile", "/dev/null", "File to output logs.")
+	pingInterval = pflag.DurationP("interval", "i", time.Second,
+		fmt.Sprintf("Interval between pings to a single host. May not be less than %v.", maxPingInterval))
 )
 
 // FlagVars.
@@ -37,6 +43,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// This is just for user-friendliness. The important check is the rate
+	// limiter in backend/icmp, since that gets applied in the privsep server.
+	if *pingInterval < maxPingInterval {
+		fmt.Fprintf(os.Stderr, "Ping interval may not be less than %v.\n", maxPingInterval)
+		os.Exit(1)
+	}
+
 	if *logfile != "" {
 		logf, err := tea.LogToFile(*logfile, "")
 		if err != nil {
@@ -46,7 +59,8 @@ func main() {
 	}
 
 	opts := &tui.Options{
-		Trace: *pingPath,
+		Trace:        *pingPath,
+		PingInterval: *pingInterval,
 	}
 	tbl, err := tui.New(newV4Conn, newV6Conn, pflag.Args(), opts)
 	if err != nil {

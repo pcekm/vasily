@@ -3,6 +3,7 @@ package icmp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -15,20 +16,30 @@ import (
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
+	"golang.org/x/time/rate"
 )
 
 const (
-	icmpV4ProtoNum = 1
-	icmpV6ProtoNum = 58
-	maxMTU         = 1500
+	icmpV4ProtoNum  = 1
+	icmpV6ProtoNum  = 58
+	maxMTU          = 1500
+	minPingInterval = time.Second
+	maxActiveConns  = 100
 )
 
+// Sent to when a connection is created; received from when a connection is
+// closed. This limits the total number of connections since the initial send
+// will block (or fail) if the buffer is full.
+var activeConns = make(chan any, maxActiveConns)
+
 // PingConn is a basic ping network connection. A connection may handle either
-// IPv4 or IPv6 but not both at the same time.
+// IPv4 or IPv6 but not both at the same time. Since this may run setuid root,
+// the total number of open connections is limited.
 type PingConn struct {
 	protoNum int
 	icmpType icmp.Type
 	pingID   int
+	limiter  *rate.Limiter
 
 	// Write operations are locked so that TTL can be set and reset atomically.
 	// Uses write locks for custom TTLs, and read locks for sends on the default
@@ -41,6 +52,12 @@ type PingConn struct {
 
 // New creates a new ICMP ping connection. The network arg should be:
 func New(ipVer util.IPVersion) (*PingConn, error) {
+	select {
+	case activeConns <- nil:
+	default:
+		return nil, errors.New("too many connections")
+	}
+
 	protoNum := icmpV4ProtoNum
 	icmpType := icmp.Type(ipv4.ICMPTypeEcho)
 	if ipVer == util.IPv6 {
@@ -60,6 +77,7 @@ func New(ipVer util.IPVersion) (*PingConn, error) {
 		protoNum: protoNum,
 		icmpType: icmpType,
 		pingID:   pingID,
+		limiter:  rate.NewLimiter(rate.Every(minPingInterval), 5),
 		conn:     conn,
 	}
 
@@ -68,7 +86,9 @@ func New(ipVer util.IPVersion) (*PingConn, error) {
 
 // Close closes the connection.
 func (p *PingConn) Close() error {
-	return p.conn.Close()
+	err := p.conn.Close()
+	<-activeConns
+	return err
 }
 
 // Sets the time to live of sent packets.
@@ -99,6 +119,12 @@ func (p *PingConn) ttl() (int, error) {
 
 // WriteTo sends an ICMP echo request.
 func (p *PingConn) WriteTo(pkt *backend.Packet, dest net.Addr, opts ...backend.WriteOption) error {
+	// if err := p.limiter.Wait(context.TODO()); err != nil {
+	// 	return fmt.Errorf("rate limiter: %v", err)
+	// }
+	if !p.limiter.Allow() {
+		return errors.New("rate limit exceeded")
+	}
 	dest = wrangleAddr(dest)
 	var withTTL int
 	for _, o := range opts {

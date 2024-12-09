@@ -11,6 +11,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/util"
+	"golang.org/x/time/rate"
 )
 
 var (
@@ -49,6 +50,8 @@ func TestPingConnection(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Error opening connection: %v", err)
 			}
+			defer conn.Close()
+			conn.limiter.SetLimit(rate.Inf)
 
 			for seq := 0; seq < 10; seq++ {
 				pkt := &backend.Packet{
@@ -77,5 +80,36 @@ func TestPingConnection(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestConnectionCountLimit(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skipf("Unsupported OS")
+	}
+
+	// First, create and close a connection, to ensure it doesn't continue to be
+	// counted against the total.
+	conn, err := New(util.IPv6)
+	if err != nil {
+		t.Fatalf("Error creating conn: %v", err)
+	}
+	if err := conn.Close(); err != nil {
+		t.Fatalf("Error closing conn: %v", err)
+	}
+
+	// Open as many connections as allowed.
+	for i := range maxActiveConns {
+		conn, err := New(util.IPv4)
+		if err != nil {
+			t.Fatalf("Error creating conn %d: %v", i, err)
+		}
+		defer conn.Close()
+	}
+
+	// Try and hopefully fail to create one more.
+	if conn, err := New(util.IPv4); err == nil {
+		t.Errorf("No error creating connection %d", maxActiveConns+1)
+		conn.Close()
 	}
 }

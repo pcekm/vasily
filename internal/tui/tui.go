@@ -25,19 +25,19 @@ type Options struct {
 	// each step in the path.
 	Trace bool
 
-	// PingerOpts holds options for creating new pingers.
-	PingerOpts *pinger.Options
+	// PingInterval is the interval that pings are sent.
+	PingInterval time.Duration
 }
 
 func (o *Options) trace() bool {
 	return o != nil && o.Trace
 }
 
-func (o *Options) pingerOpts() *pinger.Options {
-	if o == nil || o.PingerOpts == nil {
-		return &pinger.Options{}
+func (o *Options) pingInterval() time.Duration {
+	if o == nil || o.PingInterval == 0 {
+		return time.Second
 	}
-	return o.PingerOpts
+	return o.PingInterval
 }
 
 type updateRows struct{}
@@ -138,7 +138,9 @@ func (m *Model) connFuncForAddr(addr net.Addr) backend.NewConn {
 // Returns a command that starts running a new ping.
 func (m *Model) startPingerCmd(key table.RowKey, target net.Addr) tea.Cmd {
 	return func() tea.Msg {
-		ping, err := pinger.New(m.connFuncForAddr(target), target, nil)
+		ping, err := pinger.New(m.connFuncForAddr(target), target, &pinger.Options{
+			Interval: m.opts.pingInterval(),
+		})
 		if err != nil {
 			return err
 		}
@@ -191,7 +193,7 @@ func (m *Model) updateTraceStep(msg traceStepMsg) tea.Cmd {
 
 func (m *Model) updateRows(updateRows) tea.Cmd {
 	m.table.UpdateRows()
-	return tea.Tick(time.Second, func(time.Time) tea.Msg {
+	return tea.Tick(m.opts.pingInterval(), func(time.Time) tea.Msg {
 		return updateRows{}
 	})
 }
