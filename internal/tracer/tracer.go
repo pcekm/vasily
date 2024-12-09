@@ -22,6 +22,9 @@ const (
 	timeout = time.Second
 )
 
+// The period of sent probes. (A var so it can be changed in tests.)
+var probePeriod = time.Second
+
 // Step describes a single step in the path to a remote host.
 type Step struct {
 	// Pos is the hosts position in the path.
@@ -43,8 +46,14 @@ func TraceRoute(newConn backend.NewConn, dest net.Addr, res chan<- Step) error {
 	pkt := &backend.Packet{
 		Seq: 0,
 	}
-	for i := 1; i < maxTTL; i++ {
+	done := false
+	tick := time.Tick(probePeriod)
+	for i := 1; !done && i < maxTTL; i++ {
+		seen := make(map[string]bool)
 		for j := 0; j < maxTries; j++ {
+			if tick != nil {
+				<-tick
+			}
 			if err := conn.WriteTo(pkt, dest, backend.TTLOption{TTL: i}); err != nil {
 				return fmt.Errorf("error sending ping: %v", err)
 			}
@@ -59,14 +68,22 @@ func TraceRoute(newConn backend.NewConn, dest net.Addr, res chan<- Step) error {
 			if recvPkt.Type == backend.PacketDestinationUnreachable {
 				return fmt.Errorf("destination unreachable: %v", peer)
 			}
+
+			k := peer.String()
+			if seen[k] {
+				continue
+			}
+			seen[k] = true
 			res <- Step{Pos: i, Host: peer}
 			if recvPkt.Type == backend.PacketReply {
-				return nil
+				done = true
 			}
-			break
 		}
 	}
-	return fmt.Errorf("maximum TTL of %d reached", maxTTL)
+	if !done {
+		return fmt.Errorf("maximum TTL of %d reached", maxTTL)
+	}
+	return nil
 }
 
 func readSeq(conn backend.Conn, seq int) (*backend.Packet, net.Addr, error) {

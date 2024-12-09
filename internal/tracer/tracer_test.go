@@ -1,8 +1,8 @@
 package tracer
 
 import (
+	"context"
 	"net"
-	"slices"
 	"testing"
 	"time"
 
@@ -12,16 +12,22 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+func stubProbePeriod() func() {
+	orig := probePeriod
+	probePeriod = 0
+	return func() { probePeriod = orig }
+}
+
 func hopAddr(hop int) *net.UDPAddr {
 	return &net.UDPAddr{IP: net.IPv4(192, 0, 2, byte(hop))}
 }
 
-func traceExchange(seq, ttl int, dest net.Addr) *test.PingExchangeOpts {
+func traceExchange(seq, ttl int, hopAddr *net.UDPAddr, dest net.Addr) *test.PingExchangeOpts {
 	opts := test.NewPingExchange(seq)
 	opts.Dest = dest
 	opts.TTL = ttl
 	opts.RecvPkt.Type = backend.PacketTimeExceeded
-	opts.Peer = hopAddr(ttl)
+	opts.Peer = hopAddr
 	return opts
 }
 
@@ -36,7 +42,8 @@ func checkTrace(t *testing.T, conn *test.MockConn, dest net.Addr, want []Step) e
 		close(errs)
 	}()
 	var result []Step
-	deadline := time.After(time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 loop:
 	for {
 		select {
@@ -48,10 +55,8 @@ loop:
 				t.Errorf("Invalid Step received: %+v", r)
 				break
 			}
-			i := r.Pos - 1
-			result = slices.Grow(result, i+1)[:i+1]
-			result[r.Pos-1] = r
-		case <-deadline:
+			result = append(result, r)
+		case <-ctx.Done():
 			t.Error("Timed out waiting for result channel close.")
 			break loop
 		}
@@ -59,38 +64,46 @@ loop:
 	if diff := cmp.Diff(want, result); diff != "" {
 		t.Errorf("Incorrect path (-want, +got):\n%v", diff)
 	}
-	return <-errs
+	select {
+	case err := <-errs:
+		return err
+	case <-ctx.Done():
+		return nil
+	}
 }
 
 func TestTraceRoute(t *testing.T) {
-	const pathLen = 10
+	defer stubProbePeriod()()
+	const pathLen = 3
+	const nTries = 3
 
-	dest := hopAddr(pathLen)
+	dest := hopAddr(pathLen * nTries)
 
 	ctrl := gomock.NewController(t)
 	conn := test.NewMockConn(ctrl)
 
 	for i := 0; i < pathLen; i++ {
-		tp := backend.PacketTimeExceeded
-		if i == pathLen-1 {
-			tp = backend.PacketReply
+		for j := 0; j < nTries; j++ {
+			tp := backend.PacketTimeExceeded
+			if i == pathLen-1 {
+				tp = backend.PacketReply
+			}
+			opts := traceExchange(i*nTries+j, i+1, hopAddr(i*nTries+j+1), dest)
+			opts.RecvPkt.Type = tp
+			conn.MockPingExchange(opts)
 		}
-		opts := traceExchange(i, i+1, dest)
-		opts.RecvPkt.Type = tp
-		conn.MockPingExchange(opts)
 	}
 
 	want := []Step{
 		{Pos: 1, Host: hopAddr(1)},
-		{Pos: 2, Host: hopAddr(2)},
-		{Pos: 3, Host: hopAddr(3)},
-		{Pos: 4, Host: hopAddr(4)},
-		{Pos: 5, Host: hopAddr(5)},
-		{Pos: 6, Host: hopAddr(6)},
-		{Pos: 7, Host: hopAddr(7)},
-		{Pos: 8, Host: hopAddr(8)},
-		{Pos: 9, Host: hopAddr(9)},
-		{Pos: 10, Host: hopAddr(10)},
+		{Pos: 1, Host: hopAddr(2)},
+		{Pos: 1, Host: hopAddr(3)},
+		{Pos: 2, Host: hopAddr(4)},
+		{Pos: 2, Host: hopAddr(5)},
+		{Pos: 2, Host: hopAddr(6)},
+		{Pos: 3, Host: hopAddr(7)},
+		{Pos: 3, Host: hopAddr(8)},
+		{Pos: 3, Host: hopAddr(9)},
 	}
 	if err := checkTrace(t, conn, dest, want); err != nil {
 		t.Errorf("TraceRoute error: %v", err)
@@ -100,15 +113,17 @@ func TestTraceRoute(t *testing.T) {
 }
 
 func TestTraceRouteUnreachablePacket(t *testing.T) {
-	const pathLen = 3
+	defer stubProbePeriod()()
+	const pathLen = 2
 
 	dest := hopAddr(pathLen)
 
 	ctrl := gomock.NewController(t)
 	conn := test.NewMockConn(ctrl)
-	opts := traceExchange(0, 1, dest)
-	conn.MockPingExchange(opts)
-	opts = traceExchange(1, 2, dest)
+	conn.MockPingExchange(traceExchange(0, 1, hopAddr(1), dest))
+	conn.MockPingExchange(traceExchange(1, 1, hopAddr(1), dest))
+	conn.MockPingExchange(traceExchange(2, 1, hopAddr(1), dest))
+	opts := traceExchange(3, 2, dest, dest)
 	opts.RecvPkt.Type = backend.PacketDestinationUnreachable
 	conn.MockPingExchange(opts)
 
@@ -123,34 +138,81 @@ func TestTraceRouteUnreachablePacket(t *testing.T) {
 }
 
 func TestTraceRouteDroppedPacket(t *testing.T) {
+	defer stubProbePeriod()()
 	const pathLen = 3
 
 	dest := hopAddr(pathLen)
 
 	ctrl := gomock.NewController(t)
 	conn := test.NewMockConn(ctrl)
-	opts := traceExchange(0, 1, dest)
+	conn.MockPingExchange(traceExchange(0, 1, hopAddr(1), dest))
+	conn.MockPingExchange(traceExchange(1, 1, hopAddr(1), dest))
+	conn.MockPingExchange(traceExchange(2, 1, hopAddr(1), dest))
+
+	opts := traceExchange(3, 2, hopAddr(2), dest)
+	opts.RecvErr = backend.ErrTimeout
+	conn.MockPingExchange(opts)
+	opts = traceExchange(4, 2, hopAddr(2), dest)
+	opts.RecvErr = backend.ErrTimeout
+	conn.MockPingExchange(opts)
+	opts = traceExchange(5, 2, hopAddr(2), dest)
+	opts.RecvErr = backend.ErrTimeout
 	conn.MockPingExchange(opts)
 
-	// Three retries for dropped packet:
-	opts = traceExchange(1, 2, dest)
-	opts.RecvErr = backend.ErrTimeout
+	opts = traceExchange(6, 3, dest, dest)
+	opts.RecvPkt.Type = backend.PacketReply
 	conn.MockPingExchange(opts)
-	opts = traceExchange(2, 2, dest)
-	opts.RecvErr = backend.ErrTimeout
+	opts = traceExchange(7, 3, dest, dest)
+	opts.RecvPkt.Type = backend.PacketReply
 	conn.MockPingExchange(opts)
-	opts = traceExchange(3, 2, dest)
-	opts.RecvErr = backend.ErrTimeout
-	conn.MockPingExchange(opts)
-
-	opts = traceExchange(4, 3, dest)
+	opts = traceExchange(8, 3, dest, dest)
 	opts.RecvPkt.Type = backend.PacketReply
 	conn.MockPingExchange(opts)
 
 	want := []Step{
 		{Pos: 1, Host: hopAddr(1)},
-		{},
 		{Pos: 3, Host: hopAddr(3)},
+	}
+	if err := checkTrace(t, conn, dest, want); err != nil {
+		t.Errorf("TraceRoute error: %v", err)
+	}
+
+	ctrl.Finish()
+}
+
+func TestTraceRouteDeduplication(t *testing.T) {
+	defer stubProbePeriod()()
+	const pathLen = 3
+
+	dest := hopAddr(6)
+
+	ctrl := gomock.NewController(t)
+	conn := test.NewMockConn(ctrl)
+	conn.MockPingExchange(traceExchange(0, 1, hopAddr(1), dest))
+	conn.MockPingExchange(traceExchange(1, 1, hopAddr(1), dest))
+	conn.MockPingExchange(traceExchange(2, 1, hopAddr(1), dest))
+
+	conn.MockPingExchange(traceExchange(3, 2, hopAddr(2), dest))
+	conn.MockPingExchange(traceExchange(4, 2, hopAddr(3), dest))
+	conn.MockPingExchange(traceExchange(5, 2, hopAddr(4), dest))
+
+	opt := traceExchange(6, 3, hopAddr(5), dest)
+	opt.RecvPkt.Type = backend.PacketReply
+	conn.MockPingExchange(opt)
+	opt = traceExchange(7, 3, hopAddr(6), dest)
+	opt.RecvPkt.Type = backend.PacketReply
+	conn.MockPingExchange(opt)
+	opt = traceExchange(8, 3, hopAddr(5), dest)
+	opt.RecvPkt.Type = backend.PacketReply
+	conn.MockPingExchange(opt)
+
+	want := []Step{
+		{Pos: 1, Host: hopAddr(1)},
+		{Pos: 2, Host: hopAddr(2)},
+		{Pos: 2, Host: hopAddr(3)},
+		{Pos: 2, Host: hopAddr(4)},
+		{Pos: 3, Host: hopAddr(5)},
+		{Pos: 3, Host: hopAddr(6)},
 	}
 	if err := checkTrace(t, conn, dest, want); err != nil {
 		t.Errorf("TraceRoute error: %v", err)
