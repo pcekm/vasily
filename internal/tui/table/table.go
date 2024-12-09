@@ -292,7 +292,7 @@ func (t *Model) renderCell(v any, width int, out io.StringWriter) {
 }
 
 func (t *Model) renderLatencies(width int, p *pinger.Pinger) string {
-	chars := make([]string, width)
+	chars := slices.Repeat([]string{" "}, width)
 	i := 0
 	for _, r := range p.RevResults() {
 		frac := math.Min(1, float64(r.Latency)/float64(graphMax))
