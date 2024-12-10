@@ -27,6 +27,12 @@ type Options struct {
 
 	// PingInterval is the interval that pings are sent.
 	PingInterval time.Duration
+
+	// TraceInterval is the interval between route trace probes.
+	TraceInterval time.Duration
+
+	// ProbesPerHop is the number of times to probe for responses at each ttl.
+	ProbesPerHop int
 }
 
 func (o *Options) trace() bool {
@@ -38,6 +44,20 @@ func (o *Options) pingInterval() time.Duration {
 		return time.Second
 	}
 	return o.PingInterval
+}
+
+func (o *Options) traceInterval() time.Duration {
+	if o == nil || o.TraceInterval == 0 {
+		return time.Second
+	}
+	return o.TraceInterval
+}
+
+func (o *Options) probesPerHop() int {
+	if o == nil || o.ProbesPerHop == 0 {
+		return 3
+	}
+	return o.ProbesPerHop
 }
 
 type updateRows struct{}
@@ -159,7 +179,11 @@ func (m *Model) startTraceCmd(addr net.Addr) tea.Cmd {
 	ch := make(chan tracer.Step)
 	return tea.Batch(
 		func() tea.Msg {
-			err := tracer.TraceRoute(m.connFuncForAddr(addr), addr, ch)
+			opts := &tracer.Options{
+				Interval:     m.opts.traceInterval(),
+				ProbesPerHop: m.opts.probesPerHop(),
+			}
+			err := tracer.TraceRoute(m.connFuncForAddr(addr), addr, ch, opts)
 			if err != nil {
 				return fmt.Errorf("traceroute: %v: %v", addr, err)
 			}

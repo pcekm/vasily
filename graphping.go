@@ -25,6 +25,9 @@ var (
 	logfile      = pflag.String("logfile", "/dev/null", "File to output logs.")
 	pingInterval = pflag.DurationP("interval", "i", time.Second,
 		fmt.Sprintf("Interval between pings to a single host. May not be less than %v.", maxPingInterval))
+	queries       = pflag.IntP("queries", "q", 3, "Number of times to query each TTL during a traceroute.")
+	traceInterval = pflag.Duration("trace_interval", time.Second,
+		fmt.Sprintf("Interval between traceroute probes. May not be less than %v.", maxPingInterval))
 )
 
 // FlagVars.
@@ -59,8 +62,10 @@ func main() {
 	}
 
 	opts := &tui.Options{
-		Trace:        *pingPath,
-		PingInterval: *pingInterval,
+		Trace:         *pingPath,
+		PingInterval:  *pingInterval,
+		TraceInterval: *traceInterval,
+		ProbesPerHop:  *queries,
 	}
 	tbl, err := tui.New(newV4Conn, newV6Conn, pflag.Args(), opts)
 	if err != nil {
