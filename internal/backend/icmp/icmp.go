@@ -3,34 +3,21 @@ package icmp
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"log"
 	"net"
-	"strings"
-	"sync"
-	"time"
 
 	"github.com/pcekm/graphping/internal/backend"
+	"github.com/pcekm/graphping/internal/backend/icmpbase"
 	"github.com/pcekm/graphping/internal/util"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
-	"golang.org/x/time/rate"
 )
 
 const (
-	icmpV4ProtoNum  = 1
-	icmpV6ProtoNum  = 58
-	maxMTU          = 1500
-	minPingInterval = time.Second
-	maxActiveConns  = 100
+	icmpV4ProtoNum = 1
+	icmpV6ProtoNum = 58
 )
-
-// Sent to when a connection is created; received from when a connection is
-// closed. This limits the total number of connections since the initial send
-// will block (or fail) if the buffer is full.
-var activeConns = make(chan any, maxActiveConns)
 
 // PingConn is a basic ping network connection. A connection may handle either
 // IPv4 or IPv6 but not both at the same time. Since this may run setuid root,
@@ -39,23 +26,19 @@ type PingConn struct {
 	protoNum int
 	icmpType icmp.Type
 	pingID   int
-	limiter  *rate.Limiter
 
-	// Write operations are locked so that TTL can be set and reset atomically.
-	// Uses write locks for custom TTLs, and read locks for sends on the default
-	// TTL. This allows concurrent writes for the more common case, and only
-	// fully locks to set the TTL, write, and reset the TTL atomically.
-	ttlMu  sync.RWMutex
-	readMu sync.Mutex
-	conn   *icmp.PacketConn
+	conn *icmpbase.Conn
 }
 
 // New creates a new ICMP ping connection. The network arg should be:
 func New(ipVer util.IPVersion) (*PingConn, error) {
-	select {
-	case activeConns <- nil:
-	default:
-		return nil, errors.New("too many connections")
+	return baseNew(ipVer, icmpbase.New)
+}
+
+func baseNew(ipVer util.IPVersion, mkConn func(util.IPVersion) (*icmpbase.Conn, error)) (*PingConn, error) {
+	conn, err := mkConn(ipVer)
+	if err != nil {
+		return nil, err
 	}
 
 	protoNum := icmpV4ProtoNum
@@ -65,113 +48,23 @@ func New(ipVer util.IPVersion) (*PingConn, error) {
 		icmpType = ipv6.ICMPTypeEchoRequest
 	}
 
-	conn, err := newConn(ipVer)
-	if err != nil {
-		return nil, fmt.Errorf("listen error: %v", err)
-	}
-	pingID, err := pingID(conn)
-	if err != nil {
-		return nil, err
-	}
-	p := &PingConn{
+	return &PingConn{
 		protoNum: protoNum,
 		icmpType: icmpType,
-		pingID:   pingID,
-		limiter:  rate.NewLimiter(rate.Every(minPingInterval), 5),
 		conn:     conn,
-	}
-
-	return p, nil
+	}, nil
 }
 
 // Close closes the connection.
 func (p *PingConn) Close() error {
-	err := p.conn.Close()
-	<-activeConns
-	return err
-}
-
-// Sets the time to live of sent packets.
-func (p *PingConn) setTTL(ttl int) error {
-	switch p.protoNum {
-	case icmpV4ProtoNum:
-		return p.conn.IPv4PacketConn().SetTTL(ttl)
-	case icmpV6ProtoNum:
-		return p.conn.IPv6PacketConn().SetHopLimit(ttl)
-	default:
-		log.Panicf("Invalid protonum: %d", p.protoNum)
-	}
-	return nil
-}
-
-// Gets the time to live of sent packets.
-func (p *PingConn) ttl() (int, error) {
-	switch p.protoNum {
-	case icmpV4ProtoNum:
-		return p.conn.IPv4PacketConn().TTL()
-	case icmpV6ProtoNum:
-		return p.conn.IPv6PacketConn().HopLimit()
-	default:
-		log.Panicf("Invalid protonum: %d", p.protoNum)
-	}
-	return 0, nil
+	return p.conn.Close()
 }
 
 // WriteTo sends an ICMP echo request.
 func (p *PingConn) WriteTo(pkt *backend.Packet, dest net.Addr, opts ...backend.WriteOption) error {
-	// if err := p.limiter.Wait(context.TODO()); err != nil {
-	// 	return fmt.Errorf("rate limiter: %v", err)
-	// }
-	if !p.limiter.Allow() {
-		return errors.New("rate limit exceeded")
-	}
-	dest = wrangleAddr(dest)
-	var withTTL int
-	for _, o := range opts {
-		switch o := o.(type) {
-		case backend.TTLOption:
-			withTTL = o.TTL
-		default:
-			log.Panicf("Unsupported option: %#v", o)
-		}
-	}
-	if withTTL != 0 {
-		return p.writeToTTL(pkt, dest, withTTL)
-	}
-	return p.writeToNormal(pkt, dest)
-}
-
-func (p *PingConn) writeToNormal(pkt *backend.Packet, dest net.Addr) error {
-	p.ttlMu.RLock()
-	defer p.ttlMu.RUnlock()
-	return p.baseWriteTo(pkt, dest)
-}
-
-// writeToTTL sends an ICMP echo request with a given time to live.
-func (p *PingConn) writeToTTL(pkt *backend.Packet, dest net.Addr, ttl int) error {
-	p.ttlMu.Lock()
-	defer p.ttlMu.Unlock()
-	origTTL, err := p.ttl()
-	if err != nil {
-		return fmt.Errorf("unable to get current ttl: %v", err)
-	}
-	defer func() {
-		if err := p.setTTL(origTTL); err != nil {
-			log.Printf("Unable to set ttl: %v", err)
-		}
-	}()
-	if err := p.setTTL(ttl); err != nil {
-		return fmt.Errorf("unable to set ttl: %v", err)
-	}
-	return p.baseWriteTo(pkt, dest)
-}
-
-// Core writeTo function. Callers must hold p.mu.
-func (p *PingConn) baseWriteTo(pkt *backend.Packet, dest net.Addr) error {
 	if pkt.Type != backend.PacketRequest {
 		return fmt.Errorf("packet type must be %v (got %v)", backend.PacketReply, pkt.Type)
 	}
-
 	wm := icmp.Message{
 		Type: p.icmpType,
 		Code: 0,
@@ -181,40 +74,17 @@ func (p *PingConn) baseWriteTo(pkt *backend.Packet, dest net.Addr) error {
 			Data: pkt.Payload,
 		},
 	}
-	wb, err := wm.Marshal(nil)
-	if err != nil {
-		return fmt.Errorf("marshal error: %v", err)
-	}
-
-	if _, err := p.conn.WriteTo(wb, dest); err != nil {
-		return err
-	}
-	return nil
+	return p.conn.WriteTo(&wm, dest, opts...)
 }
 
 // Reads an ICMP echo response.
 func (p *PingConn) ReadFrom(ctx context.Context) (*backend.Packet, net.Addr, error) {
-	buf := make([]byte, maxMTU)
 	for {
-		if dl, ok := ctx.Deadline(); ok {
-			if err := p.conn.SetReadDeadline(dl); err != nil {
-				return nil, nil, err
-			}
-		} else if err := p.conn.SetReadDeadline(time.Time{}); err != nil {
-			return nil, nil, err
-		}
-		n, peer, err := p.conn.ReadFrom(buf)
+		rm, peer, err := p.conn.ReadFrom(ctx)
 		if err != nil {
-			if strings.HasSuffix(err.Error(), "timeout") {
-				return nil, peer, backend.ErrTimeout
-			}
-			return nil, peer, fmt.Errorf("connection read error: %v", err)
+			return nil, peer, err
 		}
 
-		rm, err := icmp.ParseMessage(p.protoNum, buf[:n])
-		if err != nil {
-			return nil, peer, fmt.Errorf("error parsing ICMP message: %v", err)
-		}
 		if rm.Type == ipv6.ICMPTypeEchoRequest {
 			// Weirdly, on MacOS, this sometimes receives the _sent_ ipv6 packet.
 			// Ignore it and wait for another packet.

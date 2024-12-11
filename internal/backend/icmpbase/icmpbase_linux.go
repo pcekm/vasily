@@ -1,6 +1,6 @@
 //go:build !rawsock
 
-package icmp
+package icmpbase
 
 import (
 	"log"
@@ -34,8 +34,8 @@ func wrangleAddr(addr net.Addr) *net.IPAddr {
 }
 
 // Gets the ICMP id for this session.
-func pingID(net.PacketConn) (int, error) {
-	return util.GenID(), nil
+func pingID(net.PacketConn) int {
+	return util.GenID()
 }
 
 /*

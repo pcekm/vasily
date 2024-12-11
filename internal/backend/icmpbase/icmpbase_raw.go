@@ -1,6 +1,6 @@
-//go:build !rawsock
+//go:build rawsock || !(darwin || linux)
 
-package icmp
+package icmpbase
 
 import (
 	"log"
@@ -14,26 +14,26 @@ func newConn(ipVer util.IPVersion) (*icmp.PacketConn, error) {
 	var network string
 	switch ipVer {
 	case util.IPv4:
-		network = "udp4"
+		network = "ip4:icmp"
 	case util.IPv6:
-		network = "udp6"
+		network = "ip6:ipv6-icmp"
 	default:
 		log.Panicf("Unknown IP version: %v", ipVer)
 	}
 	return icmp.ListenPacket(network, "")
 }
 
-func wrangleAddr(addr net.Addr) *net.UDPAddr {
+func wrangleAddr(addr net.Addr) *net.IPAddr {
 	switch addr := addr.(type) {
 	case *net.IPAddr:
-		return &net.UDPAddr{IP: addr.IP}
-	case *net.UDPAddr:
 		return addr
+	case *net.UDPAddr:
+		return &net.IPAddr{IP: addr.IP}
 	}
 	return nil
 }
 
 // Gets the ICMP id for this session.
-func pingID(net.PacketConn) (int, error) {
-	return util.GenID(), nil
+func pingID(net.PacketConn) int {
+	return util.GenID()
 }
