@@ -14,11 +14,7 @@ import (
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
-)
-
-const (
-	icmpV4ProtoNum = 1
-	icmpV6ProtoNum = 58
+	"golang.org/x/sys/unix"
 )
 
 // PingConn is a basic ping network connection. A connection may handle either
@@ -42,10 +38,10 @@ func baseNew(ipVer util.IPVersion, mkConn func(util.IPVersion) (*icmpbase.Conn, 
 		return nil, err
 	}
 
-	protoNum := icmpV4ProtoNum
+	protoNum := unix.IPPROTO_ICMP
 	icmpType := icmp.Type(ipv4.ICMPTypeEcho)
 	if ipVer == util.IPv6 {
-		protoNum = icmpV6ProtoNum
+		protoNum = unix.IPPROTO_ICMPV6
 		icmpType = ipv6.ICMPTypeEchoRequest
 	}
 
@@ -97,7 +93,7 @@ func (p *PingConn) ReadFrom(ctx context.Context) (*backend.Packet, net.Addr, err
 			continue
 		}
 		if rm.Type != ipv4.ICMPTypeEchoReply && rm.Type != ipv6.ICMPTypeEchoReply {
-			pkt, id, err := icmpMessageToPacket(rm)
+			pkt, id, err := p.icmpMessageToPacket(rm)
 			// Filter out unrelated IDs.
 			if err == nil && id != p.conn.EchoID() {
 				continue
@@ -120,7 +116,7 @@ func echoToPacket(msg *icmp.Echo) (*backend.Packet, int) {
 	}, msg.ID
 }
 
-func icmpMessageToPacket(msg *icmp.Message) (*backend.Packet, int, error) {
+func (p *PingConn) icmpMessageToPacket(msg *icmp.Message) (*backend.Packet, int, error) {
 	var packetType backend.PacketType
 	var bodyData []byte
 
@@ -140,7 +136,7 @@ func icmpMessageToPacket(msg *icmp.Message) (*backend.Packet, int, error) {
 		return nil, 0, fmt.Errorf("error parsing TimeExceeded header: %v", err)
 	}
 
-	retICMP, err := icmp.ParseMessage(icmpV4ProtoNum, bodyData[ipHeader.Len:])
+	retICMP, err := icmp.ParseMessage(p.protoNum, bodyData[ipHeader.Len:])
 	if err != nil {
 		return nil, 0, fmt.Errorf("error parsing TimeExceeded body: %v", err)
 	}
