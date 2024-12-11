@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/pcekm/graphping/internal/backend"
+	"github.com/pcekm/graphping/internal/util"
 )
 
 const (
@@ -71,9 +72,9 @@ type Step struct {
 // TraceRoute finds the path to a host. Steps in the path will be returned one at a
 // time over the channel. The channel will be closed when the trace completes.
 // Steps may be returned in any order or not at all.
-func TraceRoute(newConn backend.NewConn, dest net.Addr, res chan<- Step, opts *Options) error {
+func TraceRoute(name backend.Name, ipVer util.IPVersion, dest net.Addr, res chan<- Step, opts *Options) error {
 	defer close(res)
-	conn, err := newConn()
+	conn, err := backend.New(name, ipVer)
 	if err != nil {
 		return fmt.Errorf("error creating connection: %v", err)
 	}

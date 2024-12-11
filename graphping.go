@@ -12,6 +12,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/pflag"
 
+	"github.com/pcekm/graphping/internal/backend"
+	_ "github.com/pcekm/graphping/internal/backend/icmp"
+	_ "github.com/pcekm/graphping/internal/backend/udp"
 	"github.com/pcekm/graphping/internal/lookup"
 	"github.com/pcekm/graphping/internal/privsep"
 	"github.com/pcekm/graphping/internal/tui"
@@ -28,6 +31,8 @@ var (
 	queries       = pflag.IntP("queries", "q", 3, "Number of times to query each TTL during a traceroute.")
 	traceInterval = pflag.Duration("trace_interval", time.Second,
 		fmt.Sprintf("Interval between traceroute probes. May not be less than %v.", maxPingInterval))
+	pingBackend  = backend.FlagP("protocol", "P", "icmp", "Protocol to use for pings.")
+	traceBackend = backend.FlagP("trace_protocol", "T", "udp", "Protocol to use for traceroutes.")
 )
 
 // FlagVars.
@@ -64,10 +69,12 @@ func main() {
 	opts := &tui.Options{
 		Trace:         *pingPath,
 		PingInterval:  *pingInterval,
+		PingBackend:   *pingBackend,
 		TraceInterval: *traceInterval,
+		TraceBackend:  *traceBackend,
 		ProbesPerHop:  *queries,
 	}
-	tbl, err := tui.New(newV4Conn, newV6Conn, pflag.Args(), opts)
+	tbl, err := tui.New(pflag.Args(), opts)
 	if err != nil {
 		log.Fatalf("Error initializing UI: %v", err)
 	}

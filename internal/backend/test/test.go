@@ -4,7 +4,9 @@ package test
 import (
 	context "context"
 	"errors"
+	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/pcekm/graphping/internal/backend"
@@ -18,7 +20,21 @@ var (
 
 	// LoopbackV6 is the IPv6 loopback address.
 	LoopbackV6 = &net.UDPAddr{IP: net.ParseIP("::1")}
+
+	mockMu      sync.Mutex
+	nextMockNum int
 )
+
+// RegisterMock registers a mock connection in the backend registry and returns
+// its name.
+func RegisterMock(conn backend.Conn) backend.Name {
+	mockMu.Lock()
+	defer mockMu.Unlock()
+	name := backend.Name(fmt.Sprintf("mock:%d", nextMockNum))
+	nextMockNum++
+	backend.Register(name, func(util.IPVersion) (backend.Conn, error) { return conn, nil })
+	return name
+}
 
 // PingExchangeOpts holds various parameters for a send/receive exchange of
 // pings.

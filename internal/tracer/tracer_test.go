@@ -9,6 +9,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/backend/test"
+	"github.com/pcekm/graphping/internal/util"
 	"go.uber.org/mock/gomock"
 )
 
@@ -26,7 +27,7 @@ func traceExchange(seq, ttl int, hopAddr *net.UDPAddr, dest net.Addr) *test.Ping
 }
 
 // Runs a trace and collects the validates the results.
-func checkTrace(t *testing.T, conn *test.MockConn, dest net.Addr, opts *Options, want []Step) error {
+func checkTrace(t *testing.T, name backend.Name, dest net.Addr, opts *Options, want []Step) error {
 	t.Helper()
 	ch := make(chan Step)
 	errs := make(chan error)
@@ -35,7 +36,7 @@ func checkTrace(t *testing.T, conn *test.MockConn, dest net.Addr, opts *Options,
 	}
 	opts.Interval = noInterval
 	go func() {
-		if err := TraceRoute(func() (backend.Conn, error) { return conn, nil }, dest, ch, opts); err != nil {
+		if err := TraceRoute(name, util.IPv4, dest, ch, opts); err != nil {
 			errs <- err
 		}
 		close(errs)
@@ -80,6 +81,7 @@ func TestTraceRoute(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	conn := test.NewMockConn(ctrl)
+	name := test.RegisterMock(conn)
 
 	for try := 0; try < nTries; try++ {
 		for ttl := 0; ttl < pathLen; ttl++ {
@@ -104,7 +106,7 @@ func TestTraceRoute(t *testing.T) {
 		{Pos: 2, Host: hopAddr(23)},
 		{Pos: 3, Host: hopAddr(33)},
 	}
-	if err := checkTrace(t, conn, dest, nil, want); err != nil {
+	if err := checkTrace(t, name, dest, nil, want); err != nil {
 		t.Errorf("TraceRoute error: %v", err)
 	}
 
@@ -118,6 +120,7 @@ func TestTraceRouteUnreachablePacket(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	conn := test.NewMockConn(ctrl)
+	name := test.RegisterMock(conn)
 	conn.MockPingExchange(traceExchange(0, 1, hopAddr(1), dest))
 	opts := traceExchange(1, 2, dest, dest)
 	opts.RecvPkt.Type = backend.PacketDestinationUnreachable
@@ -126,7 +129,7 @@ func TestTraceRouteUnreachablePacket(t *testing.T) {
 	want := []Step{
 		{Pos: 1, Host: hopAddr(1)},
 	}
-	if err := checkTrace(t, conn, dest, nil, want); err == nil {
+	if err := checkTrace(t, name, dest, nil, want); err == nil {
 		t.Error("No error after destination unreachable.")
 	}
 
@@ -140,6 +143,7 @@ func TestTraceRouteDroppedPacket(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	conn := test.NewMockConn(ctrl)
+	name := test.RegisterMock(conn)
 	conn.MockPingExchange(traceExchange(0, 1, hopAddr(1), dest))
 
 	opts := traceExchange(1, 2, hopAddr(2), dest)
@@ -154,7 +158,7 @@ func TestTraceRouteDroppedPacket(t *testing.T) {
 		{Pos: 1, Host: hopAddr(1)},
 		{Pos: 3, Host: hopAddr(3)},
 	}
-	if err := checkTrace(t, conn, dest, &Options{ProbesPerHop: 1}, want); err != nil {
+	if err := checkTrace(t, name, dest, &Options{ProbesPerHop: 1}, want); err != nil {
 		t.Errorf("TraceRoute error: %v", err)
 	}
 
@@ -168,6 +172,7 @@ func TestTraceRouteDeduplication(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	conn := test.NewMockConn(ctrl)
+	name := test.RegisterMock(conn)
 	conn.MockPingExchange(traceExchange(0, 1, hopAddr(1), dest))
 	conn.MockPingExchange(traceExchange(1, 2, hopAddr(2), dest))
 	opt := traceExchange(2, 3, hopAddr(5), dest)
@@ -193,7 +198,7 @@ func TestTraceRouteDeduplication(t *testing.T) {
 		{Pos: 2, Host: hopAddr(3)},
 		{Pos: 2, Host: hopAddr(4)},
 	}
-	if err := checkTrace(t, conn, dest, nil, want); err != nil {
+	if err := checkTrace(t, name, dest, nil, want); err != nil {
 		t.Errorf("TraceRoute error: %v", err)
 	}
 

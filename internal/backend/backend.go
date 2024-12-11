@@ -8,10 +8,19 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
+	"strings"
+
+	"github.com/pcekm/graphping/internal/util"
+	"github.com/spf13/pflag"
 )
 
-// ErrTimeout indicates that an operation reached its timeout or deadline.
-var ErrTimeout = errors.New("timeout")
+var (
+	registry = make(map[Name]NewConnFunc)
+
+	// ErrTimeout indicates that an operation reached its timeout or deadline.
+	ErrTimeout = errors.New("timeout")
+)
 
 // PacketType is a type of ICMP packet.
 type PacketType int
@@ -81,5 +90,51 @@ type Conn interface {
 	Close() error
 }
 
-// NewConn is a function that creates a connection.
-type NewConn func() (Conn, error)
+// Name is the name of a backend.
+type Name string
+
+// New creates a new connection.
+func New(name Name, ipVer util.IPVersion) (Conn, error) {
+	nc, ok := registry[name]
+	if !ok {
+		return nil, fmt.Errorf("invalid backend %q", name)
+	}
+	return nc(ipVer)
+}
+
+// NewConnFunc is a function that creates a connection.
+type NewConnFunc func(util.IPVersion) (Conn, error)
+
+// Register configures a new backend.
+func Register(n Name, nc NewConnFunc) {
+	registry[n] = nc
+}
+
+type flagValue string
+
+func (f flagValue) String() string {
+	return string(f)
+}
+
+func (f *flagValue) Set(name string) error {
+	if _, ok := registry[Name(name)]; !ok {
+		return fmt.Errorf("invalid backend %q", name)
+	}
+	*f = flagValue(name)
+	return nil
+}
+
+func (f *flagValue) Type() string {
+	var names []string
+	for n := range registry {
+		names = append(names, string(n))
+	}
+	slices.Sort(names)
+	return strings.Join(names, "|")
+}
+
+// FlagP returns a flag for selecting a backend.
+func FlagP(name, shorthand, value, usage string) *Name {
+	pflag.VarP((*flagValue)(&value), name, shorthand, usage)
+	return (*Name)(&value)
+}

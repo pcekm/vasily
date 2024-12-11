@@ -17,6 +17,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+func init() {
+	backend.Register("icmp", func(v util.IPVersion) (backend.Conn, error) { return New(v) })
+}
+
 // PingConn is a basic ping network connection. A connection may handle either
 // IPv4 or IPv6 but not both at the same time. Since this may run setuid root,
 // the total number of open connections is limited.
@@ -141,8 +145,9 @@ func (p *PingConn) icmpMessageToPacket(msg *icmp.Message) (*backend.Packet, int,
 		return nil, 0, fmt.Errorf("error parsing TimeExceeded body: %v", err)
 	}
 
-	if retICMP.Type != ipv4.ICMPTypeEcho {
-		return nil, 0, fmt.Errorf("unexpected ICMP type: %v", retICMP.Type)
+	if retICMP.Type != ipv4.ICMPTypeEcho && retICMP.Type != ipv6.ICMPTypeEchoRequest {
+		// Unrelated message.
+		return nil, -1, nil
 	}
 	pkt, id := echoToPacket(retICMP.Body.(*icmp.Echo))
 	pkt.Type = packetType

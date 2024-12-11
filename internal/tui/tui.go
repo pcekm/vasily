@@ -17,6 +17,7 @@ import (
 	"github.com/pcekm/graphping/internal/tracer"
 	"github.com/pcekm/graphping/internal/tui/help"
 	"github.com/pcekm/graphping/internal/tui/table"
+	"github.com/pcekm/graphping/internal/util"
 )
 
 // Options contain main program options.
@@ -28,8 +29,14 @@ type Options struct {
 	// PingInterval is the interval that pings are sent.
 	PingInterval time.Duration
 
+	// PingBackend is the backend to use for pings.
+	PingBackend backend.Name
+
 	// TraceInterval is the interval between route trace probes.
 	TraceInterval time.Duration
+
+	// TraceBackend is the backend to use for traces.
+	TraceBackend backend.Name
 
 	// ProbesPerHop is the number of times to probe for responses at each ttl.
 	ProbesPerHop int
@@ -46,11 +53,25 @@ func (o *Options) pingInterval() time.Duration {
 	return o.PingInterval
 }
 
+func (o *Options) pingBackend() backend.Name {
+	if o == nil || o.PingBackend == "" {
+		return backend.Name("icmp")
+	}
+	return o.PingBackend
+}
+
 func (o *Options) traceInterval() time.Duration {
 	if o == nil || o.TraceInterval == 0 {
 		return time.Second
 	}
 	return o.TraceInterval
+}
+
+func (o *Options) traceBackend() backend.Name {
+	if o == nil || o.TraceBackend == "" {
+		return backend.Name("udp")
+	}
+	return o.TraceBackend
 }
 
 func (o *Options) probesPerHop() int {
@@ -73,8 +94,6 @@ type Model struct {
 	width    int
 	height   int
 	table    *table.Model
-	connV4   backend.NewConn
-	connV6   backend.NewConn
 	hosts    []string
 	help     *help.Model
 	fullHelp bool
@@ -84,14 +103,12 @@ type Model struct {
 }
 
 // New creates a new model.
-func New(connV4, connV6 backend.NewConn, hosts []string, opts *Options) (*Model, error) {
+func New(hosts []string, opts *Options) (*Model, error) {
 	m := &Model{
-		table:  table.New(),
-		connV4: connV4,
-		connV6: connV6,
-		hosts:  hosts,
-		help:   help.New(defaultKeyMap),
-		opts:   opts,
+		table: table.New(),
+		hosts: hosts,
+		help:  help.New(defaultKeyMap),
+		opts:  opts,
 	}
 	return m, nil
 }
@@ -132,33 +149,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case updateRows:
 		cmds = append(cmds, m.updateRows(msg))
 	case error:
-		log.Print(msg)
+		cmds = append(cmds, m.handleError(msg))
 	}
 	return m, tea.Batch(cmds...)
 }
 
-func (m *Model) connFuncForAddr(addr net.Addr) backend.NewConn {
-	var ip net.IP
-	switch addr := addr.(type) {
-	case *net.IPAddr:
-		ip = addr.IP
-	case *net.UDPAddr:
-		ip = addr.IP
-	case *net.TCPAddr:
-		ip = addr.IP
-	default:
-		log.Panicf("Wrong address type: %#v", addr)
-	}
-	if ip.To4() == nil {
-		return m.connV6
-	}
-	return m.connV4
+func (m *Model) handleError(err error) tea.Cmd {
+	log.Panic(err)
+	return nil
 }
 
 // Returns a command that starts running a new ping.
 func (m *Model) startPingerCmd(key table.RowKey, target net.Addr) tea.Cmd {
 	return func() tea.Msg {
-		ping, err := pinger.New(m.connFuncForAddr(target), target, &pinger.Options{
+		ping, err := pinger.New(m.opts.pingBackend(), util.AddrVersion(target), target, &pinger.Options{
 			Interval: m.opts.pingInterval(),
 		})
 		if err != nil {
@@ -183,7 +187,7 @@ func (m *Model) startTraceCmd(addr net.Addr) tea.Cmd {
 				Interval:     m.opts.traceInterval(),
 				ProbesPerHop: m.opts.probesPerHop(),
 			}
-			err := tracer.TraceRoute(m.connFuncForAddr(addr), addr, ch, opts)
+			err := tracer.TraceRoute(m.opts.traceBackend(), util.AddrVersion(addr), addr, ch, opts)
 			if err != nil {
 				return fmt.Errorf("traceroute: %v: %v", addr, err)
 			}

@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/backend/icmp"
+	_ "github.com/pcekm/graphping/internal/backend/icmp"
 	"github.com/pcekm/graphping/internal/backend/test"
 	"github.com/pcekm/graphping/internal/util"
 	"go.uber.org/mock/gomock"
@@ -34,12 +34,6 @@ func diffPingResults[T any](a, b T) string {
 		cmp.FilterValues(func(t1, t2 time.Time) bool { return true }, cmp.Ignore()))
 }
 
-func newConnFunc(c backend.Conn) backend.NewConn {
-	return func() (backend.Conn, error) {
-		return c, nil
-	}
-}
-
 func TestLive(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skipf("Unsupported OS")
@@ -49,7 +43,7 @@ func TestLive(t *testing.T) {
 		Interval: time.Millisecond,
 		History:  3,
 	}
-	p, err := New(func() (backend.Conn, error) { return icmp.New(util.IPv4) }, test.LoopbackV4, opts)
+	p, err := New(backend.Name("icmp"), util.IPv4, test.LoopbackV4, opts)
 	if err != nil {
 		t.Fatalf("Error creating pinger: %v", err)
 	}
@@ -77,6 +71,7 @@ func TestPacketLoss(t *testing.T) {
 	pe = test.NewPingExchange(1)
 	conn.MockPingExchange(pe)
 	conn.MockClose()
+	name := test.RegisterMock(conn)
 
 	opts := &Options{
 		NPings:   2,
@@ -84,7 +79,7 @@ func TestPacketLoss(t *testing.T) {
 		History:  2,
 		Timeout:  time.Millisecond,
 	}
-	p, err := New(newConnFunc(conn), test.LoopbackV4, opts)
+	p, err := New(name, util.IPv4, test.LoopbackV4, opts)
 	if err != nil {
 		t.Fatalf("Error creating pinger: %v", err)
 	}
@@ -122,6 +117,7 @@ func TestDuplicatePacket(t *testing.T) {
 	pe.RecvPkt.Seq = 0
 	conn.MockPingExchange(pe)
 	conn.MockClose()
+	name := test.RegisterMock(conn)
 
 	opts := &Options{
 		NPings:   3,
@@ -129,7 +125,7 @@ func TestDuplicatePacket(t *testing.T) {
 		History:  3,
 		Timeout:  time.Millisecond,
 	}
-	p, err := New(newConnFunc(conn), test.LoopbackV4, opts)
+	p, err := New(name, util.IPv4, test.LoopbackV4, opts)
 	if err != nil {
 		t.Fatalf("Error creating pinger: %v", err)
 	}
@@ -185,6 +181,7 @@ func TestHistory(t *testing.T) {
 		t.Run(fmt.Sprintf("nPings=%d/nHist=%d", c.nPings, c.nHist), func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			conn := test.NewMockConn(ctrl)
+			name := test.RegisterMock(conn)
 			for seq := 0; seq < c.nPings; seq++ {
 				conn.MockPingExchange(test.NewPingExchange(seq).SetPeer(mkAddr(seq)))
 			}
@@ -196,7 +193,7 @@ func TestHistory(t *testing.T) {
 				History:  c.nHist,
 				Timeout:  4 * time.Millisecond,
 			}
-			p, err := New(newConnFunc(conn), test.LoopbackV4, opts)
+			p, err := New(name, util.IPv4, test.LoopbackV4, opts)
 			if err != nil {
 				t.Fatalf("Error creating pinger: %v", err)
 			}

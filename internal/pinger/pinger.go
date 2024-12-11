@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pcekm/graphping/internal/backend"
+	"github.com/pcekm/graphping/internal/util"
 )
 
 const (
@@ -146,12 +147,11 @@ type Pinger struct {
 
 // New creates a new pinger and starts pinging. It will continue until Close()
 // is called.
-func New(newConn backend.NewConn, dest net.Addr, opts *Options) (*Pinger, error) {
-	conn, err := newConn()
+func New(be backend.Name, ipVer util.IPVersion, dest net.Addr, opts *Options) (*Pinger, error) {
+	conn, err := backend.New(be, ipVer)
 	if err != nil {
 		return nil, err
 	}
-
 	return &Pinger{
 		conn: conn,
 		dest: dest,

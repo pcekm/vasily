@@ -4,6 +4,7 @@ package util
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
 	"net"
 	"sync"
@@ -62,6 +63,14 @@ func (v IPVersion) String() string {
 	}
 }
 
+// AddrVersion returns the IPVersion for the given address.
+func AddrVersion(addr net.Addr) IPVersion {
+	if IP(addr).To4() == nil {
+		return IPv6
+	}
+	return IPv4
+}
+
 // IP returns the IP from an address.
 func IP(addr net.Addr) net.IP {
 	switch addr := addr.(type) {
@@ -72,6 +81,7 @@ func IP(addr net.Addr) net.IP {
 	case *net.TCPAddr:
 		return addr.IP
 	default:
+		log.Panicf("Wrong address type: %#v", addr)
 		return nil
 	}
 }

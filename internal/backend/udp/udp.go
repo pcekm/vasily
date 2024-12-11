@@ -26,8 +26,13 @@ const (
 	ipv6FragmentType   = 44
 	ipv6FragmentExtLen = 8
 
-	basePort = 50000
+	// https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml?search=33434
+	basePort = 33434
 )
+
+func init() {
+	backend.Register("udp", func(ipVer util.IPVersion) (backend.Conn, error) { return New(ipVer) })
+}
 
 // Conn is a UDP ping connection.
 type Conn struct {
@@ -194,8 +199,7 @@ func (c *Conn) icmpToPacket(msg *icmp.Message) (*backend.Packet, int, error) {
 			return nil, -1, err
 		}
 	default:
-		// TODO: An error is probably not the right approach.
-		return nil, -1, fmt.Errorf("unhandled icmp type: %v", res.Type)
+		return nil, -1, nil
 	}
 
 	return res, srcPort, nil
