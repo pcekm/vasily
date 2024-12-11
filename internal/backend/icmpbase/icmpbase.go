@@ -1,3 +1,5 @@
+//go:build !windows
+
 // Package icmpbase is an basic ICMP connection for use by other backends.
 package icmpbase
 
@@ -7,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +17,7 @@ import (
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/util"
 	"golang.org/x/net/icmp"
+	"golang.org/x/sys/unix"
 	"golang.org/x/time/rate"
 )
 
@@ -44,7 +48,8 @@ type Conn struct {
 	// fully locks to set the TTL, write, and reset the TTL atomically.
 	ttlMu  sync.RWMutex
 	readMu sync.Mutex
-	conn   *icmp.PacketConn
+	conn   net.PacketConn
+	file   *os.File
 }
 
 // New creates a new ICMP ping connection. The network arg should be:
@@ -60,7 +65,7 @@ func New(ipVer util.IPVersion) (*Conn, error) {
 		protoNum = icmpV6ProtoNum
 	}
 
-	conn, err := newConn(ipVer)
+	conn, file, err := newConn(ipVer)
 	if err != nil {
 		return nil, fmt.Errorf("listen error: %v", err)
 	}
@@ -69,6 +74,7 @@ func New(ipVer util.IPVersion) (*Conn, error) {
 		echoID:   pingID(conn),
 		limiter:  rate.NewLimiter(rate.Every(minPingInterval), 5),
 		conn:     conn,
+		file:     file,
 	}
 
 	return p, nil
@@ -87,9 +93,17 @@ func NewUnlimited(ipVer util.IPVersion) (*Conn, error) {
 
 // Close closes the connection.
 func (p *Conn) Close() error {
-	err := p.conn.Close()
+	err := errors.Join(
+		p.conn.Close(),
+		p.file.Close(),
+	)
 	<-activeConns
 	return err
+}
+
+// Fd returns the file descriptor for the underlying socket.
+func (p *Conn) Fd() int {
+	return int(p.file.Fd())
 }
 
 // EchoID returns the ICMP ID that must be used with this connection.
@@ -101,9 +115,9 @@ func (p *Conn) EchoID() int {
 func (p *Conn) setTTL(ttl int) error {
 	switch p.protoNum {
 	case icmpV4ProtoNum:
-		return p.conn.IPv4PacketConn().SetTTL(ttl)
+		return unix.SetsockoptInt(p.Fd(), unix.IPPROTO_IP, unix.IP_TTL, ttl)
 	case icmpV6ProtoNum:
-		return p.conn.IPv6PacketConn().SetHopLimit(ttl)
+		return unix.SetsockoptInt(p.Fd(), unix.IPPROTO_IPV6, unix.IPV6_UNICAST_HOPS, ttl)
 	default:
 		log.Panicf("Invalid protonum: %d", p.protoNum)
 	}
@@ -114,9 +128,9 @@ func (p *Conn) setTTL(ttl int) error {
 func (p *Conn) ttl() (int, error) {
 	switch p.protoNum {
 	case icmpV4ProtoNum:
-		return p.conn.IPv4PacketConn().TTL()
+		return unix.GetsockoptInt(p.Fd(), unix.IPPROTO_IP, unix.IP_TTL)
 	case icmpV6ProtoNum:
-		return p.conn.IPv6PacketConn().HopLimit()
+		return unix.GetsockoptInt(p.Fd(), unix.IPPROTO_IPV6, unix.IPV6_UNICAST_HOPS)
 	default:
 		log.Panicf("Invalid protonum: %d", p.protoNum)
 	}

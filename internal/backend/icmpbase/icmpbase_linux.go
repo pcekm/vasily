@@ -5,12 +5,13 @@ package icmpbase
 import (
 	"log"
 	"net"
+	"os"
 
 	"github.com/pcekm/graphping/internal/util"
 	"golang.org/x/net/icmp"
 )
 
-func newConn(ipVer util.IPVersion) (*icmp.PacketConn, error) {
+func newConn(ipVer util.IPVersion) (net.PacketConn, *os.File, error) {
 	var network string
 	switch ipVer {
 	case util.IPv4:
@@ -20,7 +21,8 @@ func newConn(ipVer util.IPVersion) (*icmp.PacketConn, error) {
 	default:
 		log.Panicf("Unknown IP version: %v", ipVer)
 	}
-	return icmp.ListenPacket(network, "")
+	conn, err := icmp.ListenPacket(network, "")
+	return conn, nil, err
 }
 
 func wrangleAddr(addr net.Addr) *net.IPAddr {

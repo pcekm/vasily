@@ -1,3 +1,5 @@
+//go:build !windows
+
 // Package icmp is an implementation of an ICMP pinger.
 package icmp
 
@@ -25,7 +27,6 @@ const (
 type PingConn struct {
 	protoNum int
 	icmpType icmp.Type
-	pingID   int
 
 	conn *icmpbase.Conn
 }
@@ -69,7 +70,7 @@ func (p *PingConn) WriteTo(pkt *backend.Packet, dest net.Addr, opts ...backend.W
 		Type: p.icmpType,
 		Code: 0,
 		Body: &icmp.Echo{
-			ID:   p.pingID,
+			ID:   p.conn.EchoID(),
 			Seq:  pkt.Seq,
 			Data: pkt.Payload,
 		},
@@ -98,13 +99,13 @@ func (p *PingConn) ReadFrom(ctx context.Context) (*backend.Packet, net.Addr, err
 		if rm.Type != ipv4.ICMPTypeEchoReply && rm.Type != ipv6.ICMPTypeEchoReply {
 			pkt, id, err := icmpMessageToPacket(rm)
 			// Filter out unrelated IDs.
-			if err == nil && id != p.pingID {
+			if err == nil && id != p.conn.EchoID() {
 				continue
 			}
 			return pkt, peer, err
 		}
 		pkt, id := echoToPacket(rm.Body.(*icmp.Echo))
-		if id != p.pingID {
+		if id != p.conn.EchoID() {
 			continue
 		}
 		return pkt, peer, nil

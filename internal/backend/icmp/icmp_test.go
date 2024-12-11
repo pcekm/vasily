@@ -1,3 +1,5 @@
+//go:build !windows
+
 package icmp
 
 import (
@@ -44,6 +46,7 @@ func TestPingConnection(t *testing.T) {
 	for _, c := range cases {
 		name := fmt.Sprintf("%s/%d", c.dest.IP.String(), c.ttl)
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			conn, err := baseNew(c.ipVer, icmpbase.NewUnlimited)
@@ -86,6 +89,8 @@ func TestConnectionCountLimit(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skipf("Unsupported OS")
 	}
+
+	const maxActiveConns = 100
 
 	// First, create and close a connection, to ensure it doesn't continue to be
 	// counted against the total.
