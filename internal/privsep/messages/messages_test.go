@@ -55,12 +55,17 @@ func TestReadMessage(t *testing.T) {
 		{Name: "PrivilegeDrop", Encoded: []byte{byte(msgPrivilegeDrop), 0}, Want: PrivilegeDrop{}},
 		{
 			Name:    "OpenConnection",
-			Encoded: []byte{byte(msgOpenConnection), 1, 1, 4},
-			Want:    OpenConnection{IPVer: util.IPv4},
+			Encoded: []byte{byte(msgOpenConnection), 2, 3, 102, 111, 111, 1, 4},
+			Want:    OpenConnection{Backend: "foo", IPVer: util.IPv4},
+		},
+		{
+			Name:    "OpenConnection/MissingArgs",
+			Encoded: []byte{byte(msgOpenConnection), 0},
+			WantErr: true,
 		},
 		{
 			Name:    "OpenConnection/MissingIPVer",
-			Encoded: []byte{byte(msgOpenConnection), 0},
+			Encoded: []byte{byte(msgOpenConnection), 1, 3, 102, 111, 111},
 			WantErr: true,
 		},
 		{
@@ -207,8 +212,8 @@ func TestMessage_WriteTo(t *testing.T) {
 		{Name: "PrivilegeDrop", Msg: PrivilegeDrop{}, Want: []byte{byte(msgPrivilegeDrop), 0}},
 		{
 			Name: "OpenConnection",
-			Msg:  OpenConnection{IPVer: util.IPv6},
-			Want: []byte{byte(msgOpenConnection), 1, 1, 6},
+			Msg:  OpenConnection{Backend: "foo", IPVer: util.IPv6},
+			Want: []byte{byte(msgOpenConnection), 2, 3, 102, 111, 111, 1, 6},
 		},
 		{
 			Name: "OpenConnectionReply",

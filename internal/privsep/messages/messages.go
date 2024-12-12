@@ -402,20 +402,27 @@ func (m RawMessage) asPrivilegeDrop() (msg PrivilegeDrop) {
 
 // OpenConnection is a message to open a new ICMP connection.
 type OpenConnection struct {
-	IPVer util.IPVersion
+	Backend backend.Name
+	IPVer   util.IPVersion
 }
 
 func (c OpenConnection) WriteTo(w io.Writer) (int64, error) {
 	raw := RawMessage{
 		Type: msgOpenConnection,
-		Args: [][]byte{{byte(c.IPVer)}},
+		Args: [][]byte{
+			[]byte(c.Backend),
+			{byte(c.IPVer)},
+		},
 	}
 	return raw.WriteTo(w)
 }
 
 func (m RawMessage) asOpenConnection() OpenConnection {
 	m.checkType(msgOpenConnection)
-	return OpenConnection{IPVer: m.argIPVersion(0)}
+	return OpenConnection{
+		Backend: backend.Name(m.argString(0)),
+		IPVer:   m.argIPVersion(1),
+	}
 }
 
 // OpenConnectionReply is a message to open a new ICMP connection.

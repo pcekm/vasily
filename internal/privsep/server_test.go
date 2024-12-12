@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pcekm/graphping/internal/backend"
+	_ "github.com/pcekm/graphping/internal/backend/icmp"
 	"github.com/pcekm/graphping/internal/privsep/messages"
 	"github.com/pcekm/graphping/internal/util"
 )
@@ -165,7 +166,7 @@ func TestPingLoopback(t *testing.T) {
 			var id messages.ConnectionID
 			go func() {
 				defer h.DoneWriting()
-				h.Write(messages.OpenConnection{IPVer: c.Ver})
+				h.Write(messages.OpenConnection{Backend: "icmp", IPVer: c.Ver})
 				msg := h.Read()
 				ocr, ok := msg.(messages.OpenConnectionReply)
 				if !ok {

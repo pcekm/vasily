@@ -1,28 +1,45 @@
-//go:build rawsock || !(darwin || linux)
+//go:build rawsock || !(darwin || linux || windows)
 
 package icmpbase
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"os"
 
 	"github.com/pcekm/graphping/internal/util"
-	"golang.org/x/net/icmp"
+	"golang.org/x/sys/unix"
 )
 
 func newConn(ipVer util.IPVersion) (net.PacketConn, *os.File, error) {
-	var network string
+	var domain, icmpProt int
 	switch ipVer {
 	case util.IPv4:
-		network = "ip4:icmp"
+		domain = unix.AF_INET
+		icmpProt = unix.IPPROTO_ICMP
 	case util.IPv6:
-		network = "ip6:ipv6-icmp"
+		domain = unix.AF_INET6
+		icmpProt = unix.IPPROTO_ICMPV6
 	default:
 		log.Panicf("Unknown IP version: %v", ipVer)
 	}
-	conn, err := icmp.ListenPacket(network, "")
-	return conn, nil, err
+
+	fd, err := unix.Socket(domain, unix.SOCK_RAW, icmpProt)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := unix.SetNonblock(fd, true); err != nil {
+		return nil, nil, err
+	}
+
+	f := os.NewFile(uintptr(fd), fmt.Sprintf("icmp:%v", ipVer))
+	conn, err := net.FilePacketConn(f)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return conn, f, nil
 }
 
 func wrangleAddr(addr net.Addr) *net.IPAddr {

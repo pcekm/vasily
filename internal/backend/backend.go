@@ -16,7 +16,8 @@ import (
 )
 
 var (
-	registry = make(map[Name]NewConnFunc)
+	registry      = make(map[Name]NewConnFunc)
+	privsepClient PrivsepClient
 
 	// ErrTimeout indicates that an operation reached its timeout or deadline.
 	ErrTimeout = errors.New("timeout")
@@ -95,6 +96,9 @@ type Name string
 
 // New creates a new connection.
 func New(name Name, ipVer util.IPVersion) (Conn, error) {
+	if privsepClient != nil {
+		return privsepClient.NewConn(name, ipVer)
+	}
 	nc, ok := registry[name]
 	if !ok {
 		return nil, fmt.Errorf("invalid backend %q", name)
@@ -108,6 +112,17 @@ type NewConnFunc func(util.IPVersion) (Conn, error)
 // Register configures a new backend.
 func Register(n Name, nc NewConnFunc) {
 	registry[n] = nc
+}
+
+// PrivsepClient is the required interface for the privsep client.
+type PrivsepClient interface {
+	NewConn(Name, util.IPVersion) (Conn, error)
+}
+
+// UsePrivsep configures [New] to return connections that work via the privsep
+// server.
+func UsePrivsep(client PrivsepClient) {
+	privsepClient = client
 }
 
 type flagValue string

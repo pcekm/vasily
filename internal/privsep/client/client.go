@@ -10,6 +10,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/privsep/messages"
 	"github.com/pcekm/graphping/internal/util"
 )
@@ -47,15 +48,19 @@ func (c *Client) Close() error {
 }
 
 // NewConn creates a new ping connection.
-func (c *Client) NewConn(ipVer util.IPVersion) (*Connection, error) {
-	err := c.sendMessage(messages.OpenConnection{IPVer: ipVer})
+func (c *Client) NewConn(backendName backend.Name, ipVer util.IPVersion) (backend.Conn, error) {
+	err := c.sendMessage(messages.OpenConnection{
+		Backend: backendName,
+		IPVer:   ipVer,
+	})
 	if err != nil {
 		return nil, err
 	}
 	reply := <-c.openConnReply
 	conn := &Connection{
-		client: c,
-		id:     reply.ID,
+		client:  c,
+		id:      reply.ID,
+		backend: backendName,
 		// Buffered to prevent a "hold and wait" (possible deadlock) scenario,
 		// since the send occurs while mu is locked.
 		readFrom: make(chan messages.PingReply, 1),

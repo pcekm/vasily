@@ -37,11 +37,9 @@ func defaultNewIPv6Conn() *icmp.PingConn {
 
 // Handles messages from [privClient] and issues replies.
 type Server struct {
-	newIPv4 connMaker
-	newIPv6 connMaker
-	osExit  func(int) // For test injection
-	conns   map[messages.ConnectionID]*icmp.PingConn
-	nextId  messages.ConnectionID
+	osExit func(int) // For test injection
+	conns  map[messages.ConnectionID]backend.Conn
+	nextId messages.ConnectionID
 
 	in *os.File
 
@@ -51,12 +49,10 @@ type Server struct {
 
 func newServer() *Server {
 	return &Server{
-		in:      os.Stdin,
-		out:     os.Stdout,
-		newIPv4: defaultNewIPv4Conn,
-		newIPv6: defaultNewIPv6Conn,
-		osExit:  os.Exit,
-		conns:   make(map[messages.ConnectionID]*icmp.PingConn),
+		in:     os.Stdin,
+		out:    os.Stdout,
+		osExit: os.Exit,
+		conns:  make(map[messages.ConnectionID]backend.Conn),
 	}
 }
 
@@ -118,7 +114,7 @@ func (s *Server) Close() error {
 	return errors.Join(errs...)
 }
 
-func (s *Server) connFor(id messages.ConnectionID) *icmp.PingConn {
+func (s *Server) connFor(id messages.ConnectionID) backend.Conn {
 	conn, ok := s.conns[id]
 	if !ok {
 		log.Panicf("No ICMP connection for %d", id)
@@ -168,14 +164,9 @@ func (s *Server) handlePrivilegeDrop(messages.PrivilegeDrop) {
 }
 
 func (s *Server) handleOpenConnection(msg messages.OpenConnection) {
-	var conn *icmp.PingConn
-	switch msg.IPVer {
-	case util.IPv4:
-		conn = s.newIPv4()
-	case util.IPv6:
-		conn = s.newIPv6()
-	default:
-		log.Panicf("Unknown IP version: %v", msg.IPVer)
+	conn, err := backend.New(msg.Backend, msg.IPVer)
+	if err != nil {
+		log.Panicf("Error opening connection: %v", err)
 	}
 	id := s.nextId
 	s.nextId++

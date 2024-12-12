@@ -84,15 +84,12 @@ import (
 	"os/exec"
 	"syscall"
 
+	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/privsep/client"
 )
 
 const (
 	startPrivFlag = "[privileged]"
-)
-
-var (
-	Client *client.Client
 )
 
 func Initialize() func() {
@@ -139,9 +136,10 @@ func Initialize() func() {
 	}
 	go watchdog(cmd, waited)
 
-	Client = client.New(clientIn, clientOut)
+	client := client.New(clientIn, clientOut)
+	backend.UsePrivsep(client)
 
-	return shutdownFunc(cmd, Client, waited)
+	return shutdownFunc(cmd, client, waited)
 }
 
 func stderrLogger(r io.Reader) {

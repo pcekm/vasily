@@ -102,13 +102,16 @@ func TestClientOpenClose(t *testing.T) {
 	client, server := makeCSPair(t, handler)
 	go server.Run()
 
-	conn, err := client.NewConn(util.IPv6)
+	conn, err := client.NewConn("foo", util.IPv6)
 	if err != nil {
 		t.Fatalf("NewConn error: %v", err)
 	}
 
-	if conn.ID() != 1234 {
-		t.Errorf("Wrong connection ID: %v (want %v)", conn.ID(), 1234)
+	if conn.(*Connection).ID() != 1234 {
+		t.Errorf("Wrong connection ID: %v (want %v)", conn.(*Connection).ID(), 1234)
+	}
+	if conn.(*Connection).Backend() != "foo" {
+		t.Errorf("Wrong backend name: %v (want %v)", conn.(*Connection).Backend(), "Foo")
 	}
 
 	if err := conn.Close(); err != nil {
@@ -150,7 +153,7 @@ func TestReadFrom(t *testing.T) {
 	client, server := makeCSPair(t, handler)
 	go server.Run()
 
-	conn, err := client.NewConn(util.IPv4)
+	conn, err := client.NewConn("foo", util.IPv4)
 	if err != nil {
 		t.Errorf("NewConn error: %v", err)
 	}
@@ -200,7 +203,7 @@ func TestWriteTo(t *testing.T) {
 	client, server := makeCSPair(t, handler)
 	go server.Run()
 
-	conn, err := client.NewConn(util.IPv4)
+	conn, err := client.NewConn("foo", util.IPv4)
 	if err != nil {
 		t.Errorf("NewConn error: %v", err)
 	}

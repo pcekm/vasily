@@ -13,6 +13,7 @@ import (
 type Connection struct {
 	client   *Client
 	id       messages.ConnectionID
+	backend  backend.Name
 	readFrom chan messages.PingReply
 	closed   chan error
 }
@@ -20,6 +21,11 @@ type Connection struct {
 // ID returns the connection ID. This is mostly for testing purposes.
 func (c *Connection) ID() messages.ConnectionID {
 	return c.id
+}
+
+// Backend returns the name of the backend. This is mostly for testing.
+func (c *Connection) Backend() backend.Name {
+	return c.backend
 }
 
 // WriteTo writes a ping message to a remote host.
