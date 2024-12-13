@@ -1,4 +1,4 @@
-//go:build rawsock || !darwin
+//go:build rawsock || !(darwin || linux)
 
 package privsep
 

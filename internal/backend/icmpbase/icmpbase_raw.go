@@ -4,7 +4,6 @@ package icmpbase
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"os"
 
@@ -13,19 +12,7 @@ import (
 )
 
 func newConn(ipVer util.IPVersion) (net.PacketConn, *os.File, error) {
-	var domain, icmpProt int
-	switch ipVer {
-	case util.IPv4:
-		domain = unix.AF_INET
-		icmpProt = unix.IPPROTO_ICMP
-	case util.IPv6:
-		domain = unix.AF_INET6
-		icmpProt = unix.IPPROTO_ICMPV6
-	default:
-		log.Panicf("Unknown IP version: %v", ipVer)
-	}
-
-	fd, err := unix.Socket(domain, unix.SOCK_RAW, icmpProt)
+	fd, err := unix.Socket(ipVer.AddressFamily(), unix.SOCK_RAW, ipVer.ICMPProtoNum())
 	if err != nil {
 		return nil, nil, err
 	}

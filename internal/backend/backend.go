@@ -20,6 +20,7 @@ var (
 	privsepClient PrivsepClient
 
 	// ErrTimeout indicates that an operation reached its timeout or deadline.
+	// TODO: This should probably be replaced with net.Error.Timeout().
 	ErrTimeout = errors.New("timeout")
 )
 

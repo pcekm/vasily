@@ -1,29 +1,22 @@
-//go:build !windows
-
 // Package icmpbase is an basic ICMP connection for use by other backends.
 package icmpbase
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log"
 	"net"
 	"os"
-	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/util"
-	"golang.org/x/net/icmp"
-	"golang.org/x/sys/unix"
 	"golang.org/x/time/rate"
 )
 
 const (
-	icmpV4ProtoNum  = 1
-	icmpV6ProtoNum  = 58
 	maxMTU          = 1500
 	minPingInterval = time.Second
 	maxActiveConns  = 100
@@ -38,9 +31,9 @@ var activeConns = make(chan any, maxActiveConns)
 // IPv4 or IPv6 but not both at the same time. Since this may run setuid root,
 // the total number of open connections is limited.
 type Conn struct {
-	protoNum int
-	echoID   int
-	limiter  *rate.Limiter
+	ipVer   util.IPVersion
+	echoID  int
+	limiter *rate.Limiter
 
 	// Write operations are locked so that TTL can be set and reset atomically.
 	// Uses write locks for custom TTLs, and read locks for sends on the default
@@ -60,23 +53,17 @@ func New(ipVer util.IPVersion) (*Conn, error) {
 		return nil, errors.New("too many connections")
 	}
 
-	protoNum := icmpV4ProtoNum
-	if ipVer == util.IPv6 {
-		protoNum = icmpV6ProtoNum
-	}
-
 	conn, file, err := newConn(ipVer)
 	if err != nil {
 		return nil, fmt.Errorf("listen error: %v", err)
 	}
 	p := &Conn{
-		protoNum: protoNum,
-		echoID:   pingID(conn),
-		limiter:  rate.NewLimiter(rate.Every(minPingInterval), 5),
-		conn:     conn,
-		file:     file,
+		ipVer:   ipVer,
+		echoID:  pingID(conn),
+		limiter: rate.NewLimiter(rate.Every(minPingInterval), 5),
+		conn:    conn,
+		file:    file,
 	}
-
 	return p, nil
 }
 
@@ -113,32 +100,16 @@ func (p *Conn) EchoID() int {
 
 // Sets the time to live of sent packets.
 func (p *Conn) setTTL(ttl int) error {
-	switch p.protoNum {
-	case icmpV4ProtoNum:
-		return unix.SetsockoptInt(p.Fd(), unix.IPPROTO_IP, unix.IP_TTL, ttl)
-	case icmpV6ProtoNum:
-		return unix.SetsockoptInt(p.Fd(), unix.IPPROTO_IPV6, unix.IPV6_UNICAST_HOPS, ttl)
-	default:
-		log.Panicf("Invalid protonum: %d", p.protoNum)
-	}
-	return nil
+	return syscall.SetsockoptInt(p.Fd(), p.ipVer.IPProtoNum(), p.ipVer.TTLSockOpt(), ttl)
 }
 
 // Gets the time to live of sent packets.
 func (p *Conn) ttl() (int, error) {
-	switch p.protoNum {
-	case icmpV4ProtoNum:
-		return unix.GetsockoptInt(p.Fd(), unix.IPPROTO_IP, unix.IP_TTL)
-	case icmpV6ProtoNum:
-		return unix.GetsockoptInt(p.Fd(), unix.IPPROTO_IPV6, unix.IPV6_UNICAST_HOPS)
-	default:
-		log.Panicf("Invalid protonum: %d", p.protoNum)
-	}
-	return 0, nil
+	return syscall.GetsockoptInt(p.Fd(), p.ipVer.IPProtoNum(), p.ipVer.TTLSockOpt())
 }
 
 // WriteTo sends an ICMP message.
-func (p *Conn) WriteTo(msg *icmp.Message, dest net.Addr, opts ...backend.WriteOption) error {
+func (p *Conn) WriteTo(buf []byte, dest net.Addr, opts ...backend.WriteOption) error {
 	if !p.limiter.Allow() {
 		return errors.New("rate limit exceeded")
 	}
@@ -153,19 +124,19 @@ func (p *Conn) WriteTo(msg *icmp.Message, dest net.Addr, opts ...backend.WriteOp
 		}
 	}
 	if withTTL != 0 {
-		return p.writeToTTL(msg, dest, withTTL)
+		return p.writeToTTL(buf, dest, withTTL)
 	}
-	return p.writeToNormal(msg, dest)
+	return p.writeToNormal(buf, dest)
 }
 
-func (p *Conn) writeToNormal(msg *icmp.Message, dest net.Addr) error {
+func (p *Conn) writeToNormal(buf []byte, dest net.Addr) error {
 	p.ttlMu.RLock()
 	defer p.ttlMu.RUnlock()
-	return p.baseWriteTo(msg, dest)
+	return p.baseWriteTo(buf, dest)
 }
 
-// writeToTTL sends an ICMP echo request with a given time to live.
-func (p *Conn) writeToTTL(msg *icmp.Message, dest net.Addr, ttl int) error {
+// writeToTTL sends an ICMP message with a given time to live.
+func (p *Conn) writeToTTL(buf []byte, dest net.Addr, ttl int) error {
 	p.ttlMu.Lock()
 	defer p.ttlMu.Unlock()
 	origTTL, err := p.ttl()
@@ -180,42 +151,13 @@ func (p *Conn) writeToTTL(msg *icmp.Message, dest net.Addr, ttl int) error {
 	if err := p.setTTL(ttl); err != nil {
 		return fmt.Errorf("unable to set ttl: %v", err)
 	}
-	return p.baseWriteTo(msg, dest)
+	return p.baseWriteTo(buf, dest)
 }
 
 // Core writeTo function. Callers must hold p.mu.
-func (p *Conn) baseWriteTo(msg *icmp.Message, dest net.Addr) error {
-	b, err := msg.Marshal(nil)
-	if err != nil {
-		return fmt.Errorf("marshal: %v", err)
-	}
-	if _, err := p.conn.WriteTo(b, dest); err != nil {
+func (p *Conn) baseWriteTo(buf []byte, dest net.Addr) error {
+	if _, err := p.conn.WriteTo(buf, dest); err != nil {
 		return err
 	}
 	return nil
-}
-
-// Reads an ICMP message.
-func (p *Conn) ReadFrom(ctx context.Context) (*icmp.Message, net.Addr, error) {
-	buf := make([]byte, maxMTU)
-	if dl, ok := ctx.Deadline(); ok {
-		if err := p.conn.SetReadDeadline(dl); err != nil {
-			return nil, nil, err
-		}
-	} else if err := p.conn.SetReadDeadline(time.Time{}); err != nil {
-		return nil, nil, err
-	}
-	n, peer, err := p.conn.ReadFrom(buf)
-	if err != nil {
-		if strings.HasSuffix(err.Error(), "timeout") {
-			return nil, peer, backend.ErrTimeout
-		}
-		return nil, peer, fmt.Errorf("connection read error: %v", err)
-	}
-
-	rm, err := icmp.ParseMessage(p.protoNum, buf[:n])
-	if err != nil {
-		return nil, peer, fmt.Errorf("error parsing ICMP message: %v", err)
-	}
-	return rm, peer, nil
 }

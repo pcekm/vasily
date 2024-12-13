@@ -18,6 +18,8 @@ import (
 )
 
 const (
+	maxMTU = 1500
+
 	udpProtoNum = 17
 
 	icmpV4CodePortUnreachable = 3
@@ -147,12 +149,13 @@ func (c *Conn) localPort() int {
 // ReadFrom receives a reply. The received packet will likely not include any
 // payload that was initially sent.
 func (c *Conn) ReadFrom(ctx context.Context) (*backend.Packet, net.Addr, error) {
+	buf := make([]byte, maxMTU)
 	for {
-		msg, peer, err := c.icmpConn.ReadFrom(ctx)
+		n, peer, err := c.icmpConn.ReadFrom(ctx, buf)
 		if err != nil {
 			return nil, nil, err
 		}
-		pkt, srcPort, err := c.icmpToPacket(msg)
+		pkt, srcPort, err := c.icmpToPacket(buf[:n])
 		if err != nil {
 			return nil, nil, err
 		}
@@ -175,7 +178,11 @@ func (c *Conn) Close() error {
 	}
 }
 
-func (c *Conn) icmpToPacket(msg *icmp.Message) (*backend.Packet, int, error) {
+func (c *Conn) icmpToPacket(buf []byte) (*backend.Packet, int, error) {
+	msg, err := icmp.ParseMessage(c.ipVer.ICMPProtoNum(), buf)
+	if err != nil {
+		return nil, -1, fmt.Errorf("unmarshaling icmp: %v", err)
+	}
 	res := &backend.Packet{}
 	var srcPort int
 	switch msg.Type {

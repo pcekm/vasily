@@ -1,21 +1,22 @@
-//go:build !rawsock && darwin
+//go:build !rawsock && (darwin || linux)
 
 package privsep
 
 import (
 	"fmt"
 	"os"
+	"runtime"
 )
 
 func usePrivsep() bool {
 	if os.Getuid() != os.Geteuid() {
 		fmt.Fprintf(os.Stderr, `Error: running with setuid.
 
-This is unnecessary and unsafe on MacOS. Please remove the setuid bit
+This is unnecessary and unsafe on %s. Please remove the setuid bit
 using something like:
 
     sudo chmod u-s %s
-`, os.Args[0])
+`, runtime.GOOS, os.Args[0])
 		os.Exit(1)
 	}
 

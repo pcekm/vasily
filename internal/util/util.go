@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net"
 	"sync"
+	"syscall"
 )
 
 const (
@@ -51,6 +52,58 @@ const (
 	IPv4 IPVersion = 4
 	IPv6 IPVersion = 6
 )
+
+// AddressFamily returns the socket domain for this IP version.
+func (v IPVersion) AddressFamily() int {
+	switch v {
+	case IPv4:
+		return syscall.AF_INET
+	case IPv6:
+		return syscall.AF_INET6
+	default:
+		log.Panicf("Invalid IPVersion: %v", v)
+		return -1
+	}
+}
+
+// IPProtoNum returns the socket domain for this IP version.
+func (v IPVersion) IPProtoNum() int {
+	switch v {
+	case IPv4:
+		return syscall.IPPROTO_IP
+	case IPv6:
+		return syscall.IPPROTO_IPV6
+	default:
+		log.Panicf("Invalid IPVersion: %v", v)
+		return -1
+	}
+}
+
+// ICMPProtoNum returns the protocol number for ICMPv4 or ICMPv6 as appropriate.
+func (v IPVersion) ICMPProtoNum() int {
+	switch v {
+	case IPv4:
+		return syscall.IPPROTO_ICMP
+	case IPv6:
+		return syscall.IPPROTO_ICMPV6
+	default:
+		log.Panicf("Invalid IPVersion: %v", v)
+		return -1
+	}
+}
+
+// TTLSockOpt returns socket option for accessing the time to live.
+func (v IPVersion) TTLSockOpt() int {
+	switch v {
+	case IPv4:
+		return syscall.IP_TTL
+	case IPv6:
+		return syscall.IPV6_UNICAST_HOPS
+	default:
+		log.Panicf("Invalid IPVersion: %v", v)
+		return -1
+	}
+}
 
 func (v IPVersion) String() string {
 	switch v {

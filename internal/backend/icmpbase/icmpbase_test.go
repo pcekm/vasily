@@ -38,6 +38,24 @@ func asReply(msg *icmp.Message) *icmp.Message {
 	return &res
 }
 
+func marshal(t *testing.T, msg *icmp.Message) []byte {
+	t.Helper()
+	buf, err := msg.Marshal(nil)
+	if err != nil {
+		t.Fatalf("Error marshalling message: %#v", msg)
+	}
+	return buf
+}
+
+func unmarshal(t *testing.T, ipVer util.IPVersion, buf []byte) *icmp.Message {
+	t.Helper()
+	msg, err := icmp.ParseMessage(ipVer.ICMPProtoNum(), buf)
+	if err != nil {
+		t.Fatalf("Error unmarshaling message: %v", err)
+	}
+	return msg
+}
+
 func TestPingConnection(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skipf("Unsupported OS")
@@ -85,19 +103,22 @@ func TestPingConnection(t *testing.T) {
 					opts = append(opts, backend.TTLOption{TTL: c.ttl})
 				}
 
-				if err := conn.WriteTo(msg, c.dest, opts...); err != nil {
+				if err := conn.WriteTo(marshal(t, msg), c.dest, opts...); err != nil {
 					t.Fatalf("WriteTo error: %v", err)
 				}
 
 				var (
 					gotMsg  *icmp.Message
 					gotPeer net.Addr
+					n       int
+					buf     = make([]byte, maxMTU)
 				)
 				for ctx.Err() == nil {
-					gotMsg, gotPeer, err = conn.ReadFrom(ctx)
+					n, gotPeer, err = conn.ReadFrom(ctx, buf)
 					if err != nil {
 						t.Fatalf("ReadFrom error: %v", err)
 					}
+					gotMsg = unmarshal(t, c.ipVer, buf[:n])
 					if gotMsg.Type != replType || gotMsg.Body.(*icmp.Echo).ID != conn.EchoID() {
 						continue
 					}

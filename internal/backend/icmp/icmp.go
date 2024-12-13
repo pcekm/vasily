@@ -14,7 +14,10 @@ import (
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
-	"golang.org/x/sys/unix"
+)
+
+const (
+	maxMTU = 1500
 )
 
 func init() {
@@ -25,7 +28,7 @@ func init() {
 // IPv4 or IPv6 but not both at the same time. Since this may run setuid root,
 // the total number of open connections is limited.
 type PingConn struct {
-	protoNum int
+	ipVer    util.IPVersion
 	icmpType icmp.Type
 
 	conn *icmpbase.Conn
@@ -42,15 +45,13 @@ func baseNew(ipVer util.IPVersion, mkConn func(util.IPVersion) (*icmpbase.Conn, 
 		return nil, err
 	}
 
-	protoNum := unix.IPPROTO_ICMP
 	icmpType := icmp.Type(ipv4.ICMPTypeEcho)
 	if ipVer == util.IPv6 {
-		protoNum = unix.IPPROTO_ICMPV6
 		icmpType = ipv6.ICMPTypeEchoRequest
 	}
 
 	return &PingConn{
-		protoNum: protoNum,
+		ipVer:    ipVer,
 		icmpType: icmpType,
 		conn:     conn,
 	}, nil
@@ -75,15 +76,24 @@ func (p *PingConn) WriteTo(pkt *backend.Packet, dest net.Addr, opts ...backend.W
 			Data: pkt.Payload,
 		},
 	}
-	return p.conn.WriteTo(&wm, dest, opts...)
+	buf, err := wm.Marshal(nil)
+	if err != nil {
+		return fmt.Errorf("marshal: %v", err)
+	}
+	return p.conn.WriteTo(buf, dest, opts...)
 }
 
 // Reads an ICMP echo response.
 func (p *PingConn) ReadFrom(ctx context.Context) (*backend.Packet, net.Addr, error) {
+	buf := make([]byte, maxMTU)
 	for {
-		rm, peer, err := p.conn.ReadFrom(ctx)
+		n, peer, err := p.conn.ReadFrom(ctx, buf)
 		if err != nil {
 			return nil, peer, err
+		}
+		rm, err := icmp.ParseMessage(p.ipVer.ICMPProtoNum(), buf[:n])
+		if err != nil {
+			return nil, nil, fmt.Errorf("parsing message: %v", err)
 		}
 
 		if rm.Type == ipv6.ICMPTypeEchoRequest {
@@ -140,7 +150,7 @@ func (p *PingConn) icmpMessageToPacket(msg *icmp.Message) (*backend.Packet, int,
 		return nil, 0, fmt.Errorf("error parsing TimeExceeded header: %v", err)
 	}
 
-	retICMP, err := icmp.ParseMessage(p.protoNum, bodyData[ipHeader.Len:])
+	retICMP, err := icmp.ParseMessage(p.ipVer.ICMPProtoNum(), bodyData[ipHeader.Len:])
 	if err != nil {
 		return nil, 0, fmt.Errorf("error parsing TimeExceeded body: %v", err)
 	}

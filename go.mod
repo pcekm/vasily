@@ -15,6 +15,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	go.uber.org/mock v0.5.0
 	golang.org/x/net v0.31.0
+	golang.org/x/sys v0.27.0
 	golang.org/x/time v0.8.0
 )
 
@@ -29,6 +30,5 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	golang.org/x/sync v0.9.0 // indirect
-	golang.org/x/sys v0.27.0 // indirect
 	golang.org/x/text v0.20.0 // indirect
 )
