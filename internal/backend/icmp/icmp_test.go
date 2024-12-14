@@ -1,5 +1,3 @@
-//go:build !windows
-
 package icmp
 
 import (
@@ -19,6 +17,11 @@ import (
 var (
 	localhostV4 = &net.UDPAddr{IP: net.ParseIP("127.0.0.1")}
 	localhostV6 = &net.UDPAddr{IP: net.ParseIP("::1")}
+
+	supportedOS = map[string]bool{
+		"darwin": true,
+		"linux":  true,
+	}
 )
 
 // Returns a shallow copy of the given packet with Type set to PacketReply.
@@ -29,7 +32,7 @@ func asReply(pkt *backend.Packet) *backend.Packet {
 }
 
 func TestPingConnection(t *testing.T) {
-	if runtime.GOOS != "darwin" {
+	if !supportedOS[runtime.GOOS] {
 		t.Skipf("Unsupported OS")
 	}
 	cases := []struct {
@@ -86,7 +89,7 @@ func TestPingConnection(t *testing.T) {
 }
 
 func TestConnectionCountLimit(t *testing.T) {
-	if runtime.GOOS != "darwin" {
+	if !supportedOS[runtime.GOOS] {
 		t.Skipf("Unsupported OS")
 	}
 

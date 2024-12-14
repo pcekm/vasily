@@ -1,4 +1,4 @@
-package udp
+package util
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	headerLen = 8
+	UDPHeaderLen = 8 // Length of a UDP header.
 )
 
 // Internet checksum hash.
@@ -40,15 +40,29 @@ func (c checksum) Sum() uint16 {
 	return uint16(sum)
 }
 
-type udpHeader struct {
+// UDPHeader is a header for a UDP message.
+type UDPHeader struct {
 	SrcPort  uint16
 	DstPort  uint16
 	TotalLen uint16
 	Checksum uint16
 }
 
-func (h *udpHeader) Encode() []byte {
-	b := make([]byte, headerLen)
+// Marshal encodes a UDP header. The psh field is the ip header and may be
+// either ipv4.Header or ipv6.Header. Anything else will silently produce an
+// incorrect checksum.
+func (h *UDPHeader) Marshal(psh any) []byte {
+	switch psh := psh.(type) {
+	case *ipv4.Header:
+		h.calcChecksumV4(psh)
+	case ipv4.Header:
+		h.calcChecksumV4(&psh)
+	case *ipv6.Header:
+		h.calcChecksumV6(psh)
+	case ipv6.Header:
+		h.calcChecksumV6(&psh)
+	}
+	b := make([]byte, UDPHeaderLen)
 	_, err := binary.Encode(b, binary.BigEndian, h)
 	if err != nil {
 		log.Panicf("Err encoding UDP packet: %v\n(Packet: %#v)", err, *h)
@@ -57,7 +71,7 @@ func (h *udpHeader) Encode() []byte {
 }
 
 // CalcChecksumV4 calculates and sets the Checksum field.
-func (h *udpHeader) CalcChecksumV4(ipHdr *ipv4.Header) {
+func (h *UDPHeader) calcChecksumV4(ipHdr *ipv4.Header) {
 	var ck checksum
 	ck.AddBytes([]byte(ipHdr.Src.To4()))
 	ck.AddBytes([]byte(ipHdr.Dst.To4()))
@@ -67,7 +81,7 @@ func (h *udpHeader) CalcChecksumV4(ipHdr *ipv4.Header) {
 }
 
 // CalcChecksumV6 calculates and sets the Checksum field.
-func (h *udpHeader) CalcChecksumV6(ipHdr *ipv6.Header) {
+func (h *UDPHeader) calcChecksumV6(ipHdr *ipv6.Header) {
 	var ck checksum
 	ck.AddBytes([]byte(ipHdr.Src.To16()))
 	ck.AddBytes([]byte(ipHdr.Dst.To16()))
@@ -75,19 +89,21 @@ func (h *udpHeader) CalcChecksumV6(ipHdr *ipv6.Header) {
 	h.addUDPFields(&ck)
 }
 
-func (h *udpHeader) addUDPFields(ck *checksum) {
+func (h *UDPHeader) addUDPFields(ck *checksum) {
 	ck.AddUint16(h.SrcPort)
 	ck.AddUint16(h.DstPort)
 	ck.AddUint16(h.TotalLen)
 	h.Checksum = ck.Sum()
 }
 
-func parseUDPHeader(b []byte) (int, *udpHeader, error) {
+// ParseUDPHeader parses a UDP header. A UDP header is always [UDPHeaderLen]
+// bytes long.
+func ParseUDPHeader(b []byte) (*UDPHeader, error) {
 	buf := bytes.NewBuffer(b)
-	var hdr udpHeader
+	var hdr UDPHeader
 	err := binary.Read(buf, binary.BigEndian, &hdr)
 	if err != nil {
-		return -1, nil, err
+		return nil, err
 	}
-	return headerLen, &hdr, nil
+	return &hdr, nil
 }

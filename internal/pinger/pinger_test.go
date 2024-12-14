@@ -16,6 +16,13 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+var (
+	supportedOS = map[string]bool{
+		"darwin": true,
+		"linux":  true,
+	}
+)
+
 // Compares two durations to the nearest millisecond.
 func msEq(a, b time.Duration) bool {
 	// Sometimes packets can take a little over a millisecond even when no
@@ -35,7 +42,7 @@ func diffPingResults[T any](a, b T) string {
 }
 
 func TestLive(t *testing.T) {
-	if runtime.GOOS != "darwin" {
+	if !supportedOS[runtime.GOOS] {
 		t.Skipf("Unsupported OS")
 	}
 	opts := &Options{

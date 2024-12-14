@@ -16,6 +16,13 @@ import (
 	"github.com/pcekm/graphping/internal/util"
 )
 
+var (
+	supportedOS = map[string]bool{
+		"darwin": true,
+		"linux":  true,
+	}
+)
+
 type serverHarness struct {
 	t       *testing.T
 	srv     *Server
@@ -147,7 +154,7 @@ func TestPrivilegeDrop_SmokeTest(t *testing.T) {
 // A real ping test of the loopback address. Only works on Darwin since it
 // doesn't require privileges.
 func TestPingLoopback(t *testing.T) {
-	if runtime.GOOS != "darwin" {
+	if !supportedOS[runtime.GOOS] {
 		t.Skipf("Unsupported OS: %v", runtime.GOOS)
 	}
 

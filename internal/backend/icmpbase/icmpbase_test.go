@@ -1,9 +1,8 @@
-//go:build darwin
-
 package icmpbase
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"runtime"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pcekm/graphping/internal/backend"
+	"github.com/pcekm/graphping/internal/backend/test"
 	"github.com/pcekm/graphping/internal/util"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
@@ -22,20 +22,25 @@ import (
 const payload = "Give me a ping, Vasily. One ping only, please."
 
 var (
-	localhostV4 = &net.UDPAddr{IP: net.ParseIP("127.0.0.1")}
-	localhostV6 = &net.UDPAddr{IP: net.ParseIP("::1")}
+	// Reserved for documentation; shouldn't ever reply.
+	badAddrV4 = &net.UDPAddr{IP: net.ParseIP("192.0.2.1")}
+	badAddrV6 = &net.UDPAddr{IP: net.ParseIP("1001:db8::1")}
+
+	supportedOS = map[string]bool{
+		"darwin": true,
+		"linux":  true,
+	}
 )
 
 // Returns a shallow copy of the given packet with Type set to PacketReply.
-func asReply(msg *icmp.Message) *icmp.Message {
-	res := *msg
-	switch res.Type {
-	case ipv4.ICMPTypeEcho:
-		res.Type = ipv4.ICMPTypeEchoReply
-	case ipv6.ICMPTypeEchoRequest:
-		res.Type = ipv6.ICMPTypeEchoReply
+func asReply(msg *icmp.Message) *backend.Packet {
+	body := msg.Body.(*icmp.Echo)
+	res := &backend.Packet{
+		Type:    backend.PacketReply,
+		Seq:     body.Seq,
+		Payload: body.Data,
 	}
-	return &res
+	return res
 }
 
 func marshal(t *testing.T, msg *icmp.Message) []byte {
@@ -57,24 +62,27 @@ func unmarshal(t *testing.T, ipVer util.IPVersion, buf []byte) *icmp.Message {
 }
 
 func TestPingConnection(t *testing.T) {
-	if runtime.GOOS != "darwin" {
+	if !supportedOS[runtime.GOOS] {
 		t.Skipf("Unsupported OS")
 	}
 	cases := []struct {
-		ipVer      util.IPVersion
-		listenAddr string
-		dest       *net.UDPAddr
-		ttl        int
+		ipVer       util.IPVersion
+		listenAddr  string
+		dest        *net.UDPAddr
+		ttl         int
+		wantTimeout bool
 	}{
-		{ipVer: util.IPv4, dest: localhostV4},
-		{ipVer: util.IPv4, dest: localhostV4, ttl: 1},
-		{ipVer: util.IPv6, dest: localhostV6},
-		{ipVer: util.IPv6, dest: localhostV6, ttl: 1},
+		{ipVer: util.IPv4, dest: test.LoopbackV4},
+		{ipVer: util.IPv4, dest: test.LoopbackV4, ttl: 1},
+		{ipVer: util.IPv4, dest: badAddrV4, wantTimeout: true},
+		{ipVer: util.IPv6, dest: test.LoopbackV6},
+		{ipVer: util.IPv6, dest: test.LoopbackV6, ttl: 1},
+		{ipVer: util.IPv6, dest: badAddrV6, wantTimeout: true},
 	}
 	for _, c := range cases {
 		name := fmt.Sprintf("%s/%d", c.dest.IP.String(), c.ttl)
 		t.Run(name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 			defer cancel()
 			conn, err := New(c.ipVer)
 			if err != nil {
@@ -83,17 +91,16 @@ func TestPingConnection(t *testing.T) {
 			defer conn.Close()
 			conn.limiter.SetLimit(rate.Inf)
 
-			var reqType, replType icmp.Type
+			var reqType icmp.Type
 			switch c.ipVer {
 			case util.IPv4:
 				reqType = ipv4.ICMPTypeEcho
-				replType = ipv4.ICMPTypeEchoReply
 			case util.IPv6:
 				reqType = ipv6.ICMPTypeEchoRequest
-				replType = ipv6.ICMPTypeEchoReply
 			}
 
-			for seq := 0; seq < 10; seq++ {
+			// Messages may be rate limited by the OS. Don't iterate too many times here.
+			for seq := 0; seq < 3; seq++ {
 				msg := &icmp.Message{
 					Type: reqType,
 					Body: &icmp.Echo{ID: conn.EchoID(), Seq: seq, Data: []byte(payload)},
@@ -107,30 +114,20 @@ func TestPingConnection(t *testing.T) {
 					t.Fatalf("WriteTo error: %v", err)
 				}
 
-				var (
-					gotMsg  *icmp.Message
-					gotPeer net.Addr
-					n       int
-					buf     = make([]byte, maxMTU)
-				)
-				for ctx.Err() == nil {
-					n, gotPeer, err = conn.ReadFrom(ctx, buf)
-					if err != nil {
-						t.Fatalf("ReadFrom error: %v", err)
-					}
-					gotMsg = unmarshal(t, c.ipVer, buf[:n])
-					if gotMsg.Type != replType || gotMsg.Body.(*icmp.Echo).ID != conn.EchoID() {
-						continue
-					}
-					break
+				gotMsg, gotPeer, err := conn.ReadFrom(ctx)
+				if !c.wantTimeout && err != nil {
+					t.Fatalf("ReadFrom seq %d error: %v", seq, err)
+				} else if c.wantTimeout && !errors.Is(err, backend.ErrTimeout) {
+					t.Fatalf("ReadFrom seq %d wanted timeout err (got %v)", seq, err)
 				}
-				gotMsg.Checksum = 0
-				if diff := cmp.Diff(asReply(msg), gotMsg); diff != "" {
-					t.Errorf("Wrong packet received (-want, +got):\n%v", diff)
-				}
-
-				if diff := cmp.Diff(c.dest, gotPeer); diff != "" {
-					t.Errorf("Wrong response peer (-want, +got):\n%v", diff)
+				if !c.wantTimeout {
+					want := asReply(msg)
+					if diff := cmp.Diff(want, gotMsg); diff != "" {
+						t.Errorf("Wrong packet received (-want, +got):\n%v", diff)
+					}
+					if diff := cmp.Diff(c.dest, gotPeer); diff != "" {
+						t.Errorf("Wrong response peer (-want, +got):\n%v", diff)
+					}
 				}
 			}
 		})
@@ -138,7 +135,7 @@ func TestPingConnection(t *testing.T) {
 }
 
 func TestConnectionCountLimit(t *testing.T) {
-	if runtime.GOOS != "darwin" {
+	if !supportedOS[runtime.GOOS] {
 		t.Skipf("Unsupported OS")
 	}
 

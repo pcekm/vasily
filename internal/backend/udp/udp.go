@@ -3,7 +3,6 @@ package udp
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -12,7 +11,6 @@ import (
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/backend/icmpbase"
 	"github.com/pcekm/graphping/internal/util"
-	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 )
@@ -74,6 +72,8 @@ func New(ipVer util.IPVersion) (*Conn, error) {
 	default:
 		log.Panicf("Unknown IP version: %v", ipVer)
 	}
+
+	icmpConn.SetExpectedSrcPort(c.localPort())
 
 	return c, nil
 }
@@ -149,21 +149,12 @@ func (c *Conn) localPort() int {
 // ReadFrom receives a reply. The received packet will likely not include any
 // payload that was initially sent.
 func (c *Conn) ReadFrom(ctx context.Context) (*backend.Packet, net.Addr, error) {
-	buf := make([]byte, maxMTU)
-	for {
-		n, peer, err := c.icmpConn.ReadFrom(ctx, buf)
-		if err != nil {
-			return nil, nil, err
-		}
-		pkt, srcPort, err := c.icmpToPacket(buf[:n])
-		if err != nil {
-			return nil, nil, err
-		}
-		if srcPort != c.localPort() {
-			continue
-		}
-		return pkt, peer, err
+	pkt, peer, err := c.icmpConn.ReadFrom(ctx)
+	if err != nil {
+		return nil, nil, err
 	}
+	pkt.Seq -= basePort
+	return pkt, peer, err
 }
 
 // Close closes the connection.
@@ -176,74 +167,4 @@ func (c *Conn) Close() error {
 	default:
 		return nil
 	}
-}
-
-func (c *Conn) icmpToPacket(buf []byte) (*backend.Packet, int, error) {
-	msg, err := icmp.ParseMessage(c.ipVer.ICMPProtoNum(), buf)
-	if err != nil {
-		return nil, -1, fmt.Errorf("unmarshaling icmp: %v", err)
-	}
-	res := &backend.Packet{}
-	var srcPort int
-	switch msg.Type {
-	case ipv4.ICMPTypeTimeExceeded, ipv6.ICMPTypeTimeExceeded:
-		res.Type = backend.PacketTimeExceeded
-		var err error
-		res.Seq, srcPort, res.Payload, err = c.parseReply(msg.Body.(*icmp.TimeExceeded).Data)
-		if err != nil {
-			return nil, -1, err
-		}
-	case ipv4.ICMPTypeDestinationUnreachable, ipv6.ICMPTypeDestinationUnreachable:
-		switch msg.Code {
-		case icmpV4CodePortUnreachable, icmpV6CodePortUnreachable:
-			res.Type = backend.PacketReply
-		default:
-			res.Type = backend.PacketDestinationUnreachable
-		}
-		var err error
-		res.Seq, srcPort, res.Payload, err = c.parseReply(msg.Body.(*icmp.DstUnreach).Data)
-		if err != nil {
-			return nil, -1, err
-		}
-	default:
-		return nil, -1, nil
-	}
-
-	return res, srcPort, nil
-}
-
-func (c *Conn) parseReply(data []byte) (seq int, srcPort int, payload []byte, err error) {
-	switch c.ipVer {
-	case util.IPv4:
-		ipHdr, err := ipv4.ParseHeader(data)
-		if err != nil {
-			return -1, -1, nil, err
-		}
-		data = data[ipHdr.Len:]
-	case util.IPv6:
-		ipHdr, err := ipv6.ParseHeader(data)
-		if err != nil {
-			return -1, -1, nil, err
-		}
-		data = data[ipv6.HeaderLen:]
-		if ipHdr.NextHeader == ipv6FragmentType {
-			// Apparently the packet got fragmented. :-/
-			if len(data) < ipv6FragmentExtLen {
-				return -1, -1, nil, errors.New("not enough of the packet was returned")
-			}
-			if data[0] != udpProtoNum { // NextHeader
-				return -1, -1, nil, fmt.Errorf("unrecognized header type: %d", data[0])
-			}
-			data = data[ipv6FragmentExtLen:]
-		}
-	}
-	n, udpHdr, err := parseUDPHeader(data)
-	if err != nil {
-		return -1, -1, nil, err
-	}
-	seq = int(udpHdr.DstPort - basePort)
-	if len(data[n:]) > 0 {
-		payload = data[n:]
-	}
-	return seq, int(udpHdr.SrcPort), payload, nil
 }

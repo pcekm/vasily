@@ -98,6 +98,13 @@ func (p *Conn) EchoID() int {
 	return p.echoID
 }
 
+// SetExpectedSrcPort sets the ID that will be received by this connection. This should
+// only be used when using this connection to receive ICMP error responses from
+// some other connection.
+func (p *Conn) SetExpectedSrcPort(id int) {
+	p.echoID = id
+}
+
 // Sets the time to live of sent packets.
 func (p *Conn) setTTL(ttl int) error {
 	return syscall.SetsockoptInt(p.Fd(), p.ipVer.IPProtoNum(), p.ipVer.TTLSockOpt(), ttl)

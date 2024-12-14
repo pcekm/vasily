@@ -15,27 +15,35 @@ import (
 )
 
 // ReadFrom Reads an ICMP message.
-func (c *Conn) ReadFrom(ctx context.Context, buf []byte) (int, net.Addr, error) {
+func (c *Conn) ReadFrom(ctx context.Context) (*backend.Packet, net.Addr, error) {
 	c.readMu.Lock()
 	defer c.readMu.Unlock()
 
 	if dl, ok := ctx.Deadline(); ok {
 		if err := c.conn.SetReadDeadline(dl); err != nil {
-			return -1, nil, err
+			return nil, nil, err
 		}
 	} else if err := c.conn.SetReadDeadline(time.Time{}); err != nil {
-		return -1, nil, err
-	}
-	n, peer, err := c.conn.ReadFrom(buf)
-	if err != nil {
-		var op *net.OpError
-		if errors.As(err, &op) {
-			if op.Timeout() {
-				return -1, nil, backend.ErrTimeout
-			}
-		}
-		return -1, peer, fmt.Errorf("connection read error: %v", err)
+		return nil, nil, err
 	}
 
-	return n, peer, nil
+	for {
+		buf := make([]byte, maxMTU)
+		n, peer, err := c.conn.ReadFrom(buf)
+		if err != nil {
+			var op *net.OpError
+			if errors.As(err, &op) {
+				if op.Timeout() {
+					return nil, nil, backend.ErrTimeout
+				}
+			}
+			return nil, peer, fmt.Errorf("read error: %v", err)
+		}
+
+		pkt, id, err := c.icmpToBackendPacket(buf[:n])
+		if id != c.EchoID() || pkt.Type == backend.PacketRequest {
+			continue
+		}
+		return pkt, peer, err
+	}
 }
