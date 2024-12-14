@@ -91,13 +91,7 @@ func TestPingConnection(t *testing.T) {
 			defer conn.Close()
 			conn.limiter.SetLimit(rate.Inf)
 
-			var reqType icmp.Type
-			switch c.ipVer {
-			case util.IPv4:
-				reqType = ipv4.ICMPTypeEcho
-			case util.IPv6:
-				reqType = ipv6.ICMPTypeEchoRequest
-			}
+			reqType := util.Choose[icmp.Type](c.ipVer, ipv4.ICMPTypeEcho, ipv6.ICMPTypeEchoRequest)
 
 			// Messages may be rate limited by the OS. Don't iterate too many times here.
 			for seq := 0; seq < 3; seq++ {

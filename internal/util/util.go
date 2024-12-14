@@ -53,56 +53,38 @@ const (
 	IPv6 IPVersion = 6
 )
 
-// AddressFamily returns the socket domain for this IP version.
-func (v IPVersion) AddressFamily() int {
+// Choose picks between values for IPv4 or IPv6. This is a convenient shorthand
+// for a switch statement.
+func Choose[T any](v IPVersion, val4, val6 T) T {
 	switch v {
 	case IPv4:
-		return syscall.AF_INET
+		return val4
 	case IPv6:
-		return syscall.AF_INET6
+		return val6
 	default:
 		log.Panicf("Invalid IPVersion: %v", v)
-		return -1
+		return *new(T)
 	}
+}
+
+// AddressFamily returns the socket domain for this IP version.
+func (v IPVersion) AddressFamily() int {
+	return Choose(v, syscall.AF_INET, syscall.AF_INET6)
 }
 
 // IPProtoNum returns the socket domain for this IP version.
 func (v IPVersion) IPProtoNum() int {
-	switch v {
-	case IPv4:
-		return syscall.IPPROTO_IP
-	case IPv6:
-		return syscall.IPPROTO_IPV6
-	default:
-		log.Panicf("Invalid IPVersion: %v", v)
-		return -1
-	}
+	return Choose(v, syscall.IPPROTO_IP, syscall.IPPROTO_IPV6)
 }
 
 // ICMPProtoNum returns the protocol number for ICMPv4 or ICMPv6 as appropriate.
 func (v IPVersion) ICMPProtoNum() int {
-	switch v {
-	case IPv4:
-		return syscall.IPPROTO_ICMP
-	case IPv6:
-		return syscall.IPPROTO_ICMPV6
-	default:
-		log.Panicf("Invalid IPVersion: %v", v)
-		return -1
-	}
+	return Choose(v, syscall.IPPROTO_ICMP, syscall.IPPROTO_ICMPV6)
 }
 
 // TTLSockOpt returns socket option for accessing the time to live.
 func (v IPVersion) TTLSockOpt() int {
-	switch v {
-	case IPv4:
-		return syscall.IP_TTL
-	case IPv6:
-		return syscall.IPV6_UNICAST_HOPS
-	default:
-		log.Panicf("Invalid IPVersion: %v", v)
-		return -1
-	}
+	return Choose(v, syscall.IP_TTL, syscall.IPV6_UNICAST_HOPS)
 }
 
 func (v IPVersion) String() string {

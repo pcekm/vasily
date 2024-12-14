@@ -25,7 +25,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"strconv"
 	"syscall"
@@ -91,15 +90,7 @@ func (c *Conn) readErr(buf []byte) (*backend.Packet, net.Addr, error) {
 
 	// Allocate enough space for the msg header, extended error, _and_ a
 	// trailing sock_addr to be extracted by SO_EE_OFFENDER().
-	var saSize C.size_t
-	switch c.ipVer {
-	case util.IPv4:
-		saSize = C.sizeof_struct_sockaddr_in
-	case util.IPv6:
-		saSize = C.sizeof_struct_sockaddr_in6
-	default:
-		log.Panicf("Invalid ipVer: %v", c.ipVer)
-	}
+	saSize := util.Choose(c.ipVer, C.sizeof_struct_sockaddr_in, C.sizeof_struct_sockaddr_in6)
 	oob := make([]byte, unix.CmsgSpace(int(C.sizeof_struct_sock_extended_err+saSize)))
 
 	var n, oobn int
