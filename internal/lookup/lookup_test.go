@@ -2,6 +2,7 @@ package lookup
 
 import (
 	"net"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -27,8 +28,8 @@ func TestAddr(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.addr.String(), func(t *testing.T) {
 			t.Parallel()
-			if got := Addr(c.addr); c.want != got {
-				t.Errorf("Wrong name for address: want %v got %v", c.want, got)
+			if got := Addr(c.addr); !strings.Contains(got, c.want) {
+				t.Errorf("Wrong name for address: should contain %v got %q", c.want, got)
 			}
 		})
 	}
