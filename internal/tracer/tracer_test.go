@@ -17,7 +17,8 @@ func hopAddr(hop int) *net.UDPAddr {
 	return &net.UDPAddr{IP: net.IPv4(192, 0, 2, byte(hop))}
 }
 
-func traceExchange(seq, ttl int, hopAddr *net.UDPAddr, dest net.Addr) *test.PingExchangeOpts {
+func traceExchange(ttl int, hopAddr *net.UDPAddr, dest net.Addr) *test.PingExchangeOpts {
+	seq := ttl - 1
 	opts := test.NewPingExchange(seq)
 	opts.Dest = dest
 	opts.TTL = ttl
@@ -89,7 +90,7 @@ func TestTraceRoute(t *testing.T) {
 			if ttl == pathLen-1 {
 				tp = backend.PacketReply
 			}
-			opts := traceExchange(try*nTries+ttl, ttl+1, hopAddr((ttl+1)*10+try+1), dest)
+			opts := traceExchange(ttl+1, hopAddr((ttl+1)*10+try+1), dest)
 			opts.RecvPkt.Type = tp
 			conn.MockPingExchange(opts)
 		}
@@ -121,8 +122,8 @@ func TestTraceRouteUnreachablePacket(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	conn := test.NewMockConn(ctrl)
 	name := test.RegisterMock(conn)
-	conn.MockPingExchange(traceExchange(0, 1, hopAddr(1), dest))
-	opts := traceExchange(1, 2, dest, dest)
+	conn.MockPingExchange(traceExchange(1, hopAddr(1), dest))
+	opts := traceExchange(2, dest, dest)
 	opts.RecvPkt.Type = backend.PacketDestinationUnreachable
 	conn.MockPingExchange(opts)
 
@@ -144,13 +145,13 @@ func TestTraceRouteDroppedPacket(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	conn := test.NewMockConn(ctrl)
 	name := test.RegisterMock(conn)
-	conn.MockPingExchange(traceExchange(0, 1, hopAddr(1), dest))
+	conn.MockPingExchange(traceExchange(1, hopAddr(1), dest))
 
-	opts := traceExchange(1, 2, hopAddr(2), dest)
+	opts := traceExchange(2, hopAddr(2), dest)
 	opts.RecvErr = backend.ErrTimeout
 	conn.MockPingExchange(opts)
 
-	opts = traceExchange(2, 3, dest, dest)
+	opts = traceExchange(3, dest, dest)
 	opts.RecvPkt.Type = backend.PacketReply
 	conn.MockPingExchange(opts)
 
@@ -173,21 +174,21 @@ func TestTraceRouteDeduplication(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	conn := test.NewMockConn(ctrl)
 	name := test.RegisterMock(conn)
-	conn.MockPingExchange(traceExchange(0, 1, hopAddr(1), dest))
-	conn.MockPingExchange(traceExchange(1, 2, hopAddr(2), dest))
-	opt := traceExchange(2, 3, hopAddr(5), dest)
+	conn.MockPingExchange(traceExchange(1, hopAddr(1), dest))
+	conn.MockPingExchange(traceExchange(2, hopAddr(2), dest))
+	opt := traceExchange(3, hopAddr(5), dest)
 	opt.RecvPkt.Type = backend.PacketReply
 	conn.MockPingExchange(opt)
 
-	conn.MockPingExchange(traceExchange(3, 1, hopAddr(1), dest))
-	conn.MockPingExchange(traceExchange(4, 2, hopAddr(3), dest))
-	opt = traceExchange(5, 3, hopAddr(5), dest)
+	conn.MockPingExchange(traceExchange(1, hopAddr(1), dest))
+	conn.MockPingExchange(traceExchange(2, hopAddr(3), dest))
+	opt = traceExchange(3, hopAddr(5), dest)
 	opt.RecvPkt.Type = backend.PacketReply
 	conn.MockPingExchange(opt)
 
-	conn.MockPingExchange(traceExchange(6, 1, hopAddr(1), dest))
-	conn.MockPingExchange(traceExchange(7, 2, hopAddr(4), dest))
-	opt = traceExchange(8, 3, hopAddr(5), dest)
+	conn.MockPingExchange(traceExchange(1, hopAddr(1), dest))
+	conn.MockPingExchange(traceExchange(2, hopAddr(4), dest))
+	opt = traceExchange(3, hopAddr(5), dest)
 	opt.RecvPkt.Type = backend.PacketReply
 	conn.MockPingExchange(opt)
 

@@ -23,9 +23,10 @@ type Conn struct {
 	ipVer    util.IPVersion
 	icmpConn *icmpbase.Conn
 
-	mu     sync.Mutex
-	connV4 *ipv4.PacketConn
-	connV6 *ipv6.PacketConn
+	mu       sync.Mutex
+	connV4   *ipv4.PacketConn
+	connV6   *ipv6.PacketConn
+	basePort int
 }
 
 // New opens a new connection.
@@ -37,6 +38,7 @@ func New(ipVer util.IPVersion) (*Conn, error) {
 	c := &Conn{
 		ipVer:    ipVer,
 		icmpConn: icmpConn,
+		basePort: defaultBasePort,
 	}
 
 	address := util.Choose(ipVer, "udp4", "udp6")
@@ -57,6 +59,20 @@ func New(ipVer util.IPVersion) (*Conn, error) {
 	icmpConn.SetExpectedSrcPort(c.localPort())
 
 	return c, nil
+}
+
+// SeqBasePort returns the base port number that sequence numbers are added to.
+func (c *Conn) SeqBasePort() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.basePort
+}
+
+// SetSeqBasePort sets the base port number to add to sequence numbers.
+func (c *Conn) SetSeqBasePort(p int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.basePort = p
 }
 
 // WriteTo sends a request.
@@ -80,7 +96,7 @@ func (c *Conn) WriteTo(pkt *backend.Packet, dest net.Addr, opts ...backend.Write
 	}
 
 	addr := *(dest.(*net.UDPAddr))
-	addr.Port = basePort + pkt.Seq
+	addr.Port = c.basePort + pkt.Seq
 
 	switch c.ipVer {
 	case util.IPv4:
@@ -134,7 +150,7 @@ func (c *Conn) ReadFrom(ctx context.Context) (*backend.Packet, net.Addr, error) 
 	if err != nil {
 		return nil, nil, err
 	}
-	pkt.Seq -= basePort
+	pkt.Seq -= c.SeqBasePort()
 	return pkt, peer, err
 }
 

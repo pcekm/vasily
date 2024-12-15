@@ -78,20 +78,21 @@ func TraceRoute(name backend.Name, ipVer util.IPVersion, dest net.Addr, res chan
 	if err != nil {
 		return fmt.Errorf("error creating connection: %v", err)
 	}
-	pkt := &backend.Packet{
-		Seq: 0,
-	}
+	pkt := &backend.Packet{}
 	seen := make(map[string]bool)
 	tick := immediateTick(opts.interval())
 	for tryNum := 0; tryNum < opts.probesPerHop(); tryNum++ {
+		if conn, ok := conn.(backend.PortConn); tryNum > 0 && ok {
+			conn.SetSeqBasePort(conn.SeqBasePort() + opts.maxTTL())
+		}
 		done := false
 		for ttl := 1; !done && ttl < opts.maxTTL(); ttl++ {
 			<-tick
+			pkt.Seq = ttl - 1
 			if err := conn.WriteTo(pkt, dest, backend.TTLOption{TTL: ttl}); err != nil {
 				return fmt.Errorf("error sending ping: %v", err)
 			}
-			pkt.Seq++
-			recvPkt, peer, err := readSeq(conn, pkt.Seq-1)
+			recvPkt, peer, err := readSeq(conn, pkt.Seq)
 			if err != nil {
 				if errors.Is(err, backend.ErrTimeout) {
 					continue

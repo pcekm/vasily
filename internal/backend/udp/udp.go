@@ -18,7 +18,7 @@ const (
 	ipv6FragmentExtLen = 8
 
 	// https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml?search=33434
-	basePort = 33434
+	defaultBasePort = 33434
 )
 
 func init() {

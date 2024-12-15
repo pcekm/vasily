@@ -92,6 +92,20 @@ type Conn interface {
 	Close() error
 }
 
+// PortConn is an extended interface for connections that map sequence numbers
+// onto port numbers.
+type PortConn interface {
+	Conn
+
+	// SeqBasePort returns the base port number to which sequence numbers are
+	// added. Implementations should have a reasonable default for this number.
+	SeqBasePort() int
+
+	// SetSeqBasePort sets the port number for sequence 0. Port numbers used by
+	// the backend will be pkt.Seq + this base port number.
+	SetSeqBasePort(p int)
+}
+
 // Name is the name of a backend.
 type Name string
 

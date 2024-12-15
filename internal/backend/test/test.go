@@ -63,6 +63,9 @@ type PingExchangeOpts struct {
 
 	// NoReply says not to mock a call to readFrom.
 	NoReply bool
+
+	// Times sets the number of times this exchange will occur.
+	Times int
 }
 
 // NewPingExchange creates a PingExchangeOpts struct with reasonable defaults
@@ -73,6 +76,7 @@ func NewPingExchange(seq int) *PingExchangeOpts {
 		Dest:    LoopbackV4,
 		RecvPkt: backend.Packet{Type: backend.PacketReply, Seq: seq},
 		Peer:    LoopbackV4,
+		Times:   1,
 	}
 }
 
@@ -107,6 +111,12 @@ func (p *PingExchangeOpts) SetPayload(b []byte) *PingExchangeOpts {
 	return p
 }
 
+// SetTimes sets the Times field.
+func (p *PingExchangeOpts) SetTimes(times int) *PingExchangeOpts {
+	p.Times = times
+	return p
+}
+
 type readWait struct {
 	T    time.Time
 	Opts PingExchangeOpts
@@ -122,13 +132,13 @@ func (c *MockConn) MockPingExchange(opt *PingExchangeOpts) {
 	if opt.TTL == 0 {
 		c.EXPECT().
 			WriteTo(gomock.Eq(&sendPkt), gomock.Eq(opt.Dest)).
-			Times(1).
+			Times(opt.Times).
 			Do(sendFunc).
 			Return(opt.SendErr)
 	} else {
 		c.EXPECT().
 			WriteTo(&sendPkt, opt.Dest, backend.TTLOption{TTL: opt.TTL}).
-			Times(1).
+			Times(opt.Times).
 			Do(sendFunc).
 			Return(opt.SendErr)
 	}
@@ -137,7 +147,7 @@ func (c *MockConn) MockPingExchange(opt *PingExchangeOpts) {
 		recvPkt := opt.RecvPkt
 		c.EXPECT().
 			ReadFrom(gomock.Not(gomock.Nil())).
-			Times(1).
+			Times(opt.Times).
 			Do(func(context.Context) {
 				<-pingSent
 			}).

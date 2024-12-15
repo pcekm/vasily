@@ -21,6 +21,9 @@ import (
 type Conn struct {
 	ipVer util.IPVersion
 
+	mu       sync.Mutex
+	basePort int
+
 	readMu  sync.Mutex
 	writeMu sync.Mutex
 	conn    *net.UDPConn
@@ -34,8 +37,9 @@ func New(ipVer util.IPVersion) (*Conn, error) {
 		return nil, err
 	}
 	c := &Conn{
-		ipVer: ipVer,
-		conn:  conn,
+		ipVer:    ipVer,
+		basePort: defaultBasePort,
+		conn:     conn,
 	}
 	reOpt := util.Choose(ipVer, unix.IP_RECVERR, unix.IPV6_RECVERR)
 	err = c.control(func(fd int) error {
@@ -47,6 +51,26 @@ func New(ipVer util.IPVersion) (*Conn, error) {
 // Close closes the connection.
 func (c *Conn) Close() error {
 	return c.conn.Close()
+}
+
+// SeqBasePort returns the base port number that sequence numbers are added to.
+func (c *Conn) SeqBasePort() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.basePort
+}
+
+// SetSeqBasePort sets the base port number to add to sequence numbers.
+func (c *Conn) SetSeqBasePort(p int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.basePort = p
+}
+
+func (c *Conn) getBasePort() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.basePort
 }
 
 // Wrapper around RawConn.Control() to make things easier.
@@ -101,7 +125,7 @@ func (c *Conn) WriteTo(pkt *backend.Packet, dest net.Addr, opts ...backend.Write
 	}
 
 	addr := *(dest.(*net.UDPAddr))
-	addr.Port = basePort + pkt.Seq
+	addr.Port = c.getBasePort() + pkt.Seq
 	sa := unix.SockaddrInet4{
 		Port: addr.Port,
 	}
@@ -157,7 +181,7 @@ func (c *Conn) ReadFrom(ctx context.Context) (*backend.Packet, net.Addr, error) 
 		// sent a response. That's unexpected. Deal with it as best as possible.
 		return &backend.Packet{
 			Type:    backend.PacketReply,
-			Seq:     peer.(*net.UDPAddr).Port - basePort,
+			Seq:     peer.(*net.UDPAddr).Port - c.getBasePort(),
 			Payload: buf[:n],
 		}, peer, nil
 	}
@@ -190,5 +214,5 @@ func (c *Conn) ReadFrom(ctx context.Context) (*backend.Packet, net.Addr, error) 
 		seq = sa.Port
 	}
 
-	return &backend.Packet{Type: pktType, Seq: seq - basePort}, peer, nil
+	return &backend.Packet{Type: pktType, Seq: seq - c.getBasePort()}, peer, nil
 }
