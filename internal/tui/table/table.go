@@ -234,6 +234,10 @@ func (t *Model) UpdateRows() {
 	}
 	lines := make([]string, len(t.rows))
 	for i, r := range t.rows {
+		// Collapse index numbers.
+		if i > 0 && r.Index == t.rows[i-1].Index {
+			r.Index = 0
+		}
 		lines[i] = t.renderRow(r)
 	}
 	t.vp.SetContent(strings.Join(lines, "\n"))
@@ -263,6 +267,11 @@ func (t *Model) renderRow(r Row) string {
 	cells := r.cells()
 	var sb strings.Builder
 	for i, c := range columnSpecs {
+		// A special case for zero index numbers.
+		if c.ID == colIndex && cells[c.ID] == 0 {
+			t.renderCell("", t.colWidths[i], &sb)
+			continue
+		}
 		t.renderCell(cells[c.ID], t.colWidths[i], &sb)
 	}
 	return sb.String()
