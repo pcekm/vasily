@@ -1,4 +1,4 @@
-package icmpbase
+package icmppkt
 
 import (
 	"fmt"
@@ -198,12 +198,11 @@ func TestPackets(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%v/%v", c.Name, c.IPVersion), func(t *testing.T) {
-			conn := Conn{ipVer: c.IPVersion}
 			buf, err := c.In.Marshal(nil)
 			if err != nil {
 				t.Fatalf("Marshal error: %v", err)
 			}
-			got, id, err := conn.icmpToBackendPacket(buf)
+			got, id, err := Parse(c.IPVersion, buf)
 			if err != nil {
 				t.Fatalf("Conversion error: %v", err)
 			}

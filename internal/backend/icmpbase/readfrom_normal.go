@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/pcekm/graphping/internal/backend"
+	"github.com/pcekm/graphping/internal/icmppkt"
 )
 
 // ReadFrom Reads an ICMP message.
@@ -40,7 +41,7 @@ func (c *Conn) ReadFrom(ctx context.Context) (*backend.Packet, net.Addr, error) 
 			return nil, peer, fmt.Errorf("read error: %v", err)
 		}
 
-		pkt, id, err := c.icmpToBackendPacket(buf[:n])
+		pkt, id, err := icmppkt.Parse(c.ipVer, buf[:n])
 		if id != c.EchoID() || pkt.Type == backend.PacketRequest {
 			continue
 		}
