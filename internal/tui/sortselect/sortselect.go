@@ -22,9 +22,10 @@ var (
 
 type keyMap struct {
 	list.KeyMap
-	Toggle key.Binding
-	Accept key.Binding
-	Esc    key.Binding
+	Toggle  key.Binding
+	Accept  key.Binding
+	Esc     key.Binding
+	Reverse key.Binding
 }
 
 func (k *keyMap) ShortHelp() []key.Binding {
@@ -34,14 +35,14 @@ func (k *keyMap) ShortHelp() []key.Binding {
 func (k *keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.CursorUp, k.CursorDown, k.NextPage, k.PrevPage, k.GoToStart, k.GoToEnd},
-		{k.Toggle, k.Accept, k.Esc, k.CloseFullHelp}}
+		{k.Toggle, k.Reverse, k.Accept, k.Esc, k.CloseFullHelp}}
 }
 
 var defaultKeyMap = keyMap{
 	KeyMap: list.DefaultKeyMap(),
 	Toggle: key.NewBinding(
 		key.WithKeys("x", " "),
-		key.WithHelp("space", "toggle"),
+		key.WithHelp("x/space", "toggle"),
 	),
 	Accept: key.NewBinding(
 		key.WithKeys("enter"),
@@ -51,11 +52,15 @@ var defaultKeyMap = keyMap{
 		key.WithKeys("esc", "q"),
 		key.WithHelp("esc/q", "cancel"),
 	),
+	Reverse: key.NewBinding(
+		key.WithKeys("-", "r"),
+		key.WithHelp("-/r", "reverse"),
+	),
 }
 
 type listItem struct {
-	Col table.ColumnID
-	Sel int
+	Col table.SortColumn
+	sel int
 }
 
 func (i listItem) Title() string {
@@ -63,7 +68,19 @@ func (i listItem) Title() string {
 }
 
 func (i listItem) Selected() int {
-	return i.Sel
+	return i.sel
+}
+
+func (i *listItem) SetSelected(s int) {
+	i.sel = s
+}
+
+func (i listItem) Reversed() bool {
+	return i.Col.Reverse
+}
+
+func (i *listItem) SetReversed(b bool) {
+	i.Col.Reverse = b
 }
 
 func (i listItem) FilterValue() string {
@@ -82,7 +99,14 @@ func (d delegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
 	if it.Selected() > 0 {
 		sel = fmt.Sprint(it.Selected())
 	}
-	fmt.Fprintf(w, style.Render("[%s] %s"), sel, it.Title())
+	rev := " "
+	if it.Selected() > 0 {
+		rev = "▲"
+		if it.Reversed() {
+			rev = "▼"
+		}
+	}
+	fmt.Fprintf(w, style.Render("[%s] %s %s"), sel, rev, it.Title())
 }
 
 func (d delegate) Height() int {
@@ -100,7 +124,7 @@ func (d delegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 // Done is a message generated when the user accepts the newly selected sort
 // columns.
 type Done struct {
-	Columns []table.ColumnID
+	Columns []table.SortColumn
 }
 
 // Cancel is a message generated when the user cancels sort selection.
@@ -115,11 +139,15 @@ type Model struct {
 }
 
 // New creates a new Model.
-func New(curSelected []table.ColumnID) *Model {
+func New(curSelected []table.SortColumn) *Model {
 	var items []list.Item
 	for _, col := range table.AvailColumns() {
-		sel := slices.IndexFunc(curSelected, func(c table.ColumnID) bool { return c == col }) + 1
-		items = append(items, &listItem{Col: col, Sel: sel})
+		j := slices.IndexFunc(curSelected, func(c table.SortColumn) bool { return c.ColumnID == col })
+		if j >= 0 {
+			items = append(items, &listItem{Col: curSelected[j], sel: j + 1})
+		} else {
+			items = append(items, &listItem{Col: table.SortColumn{ColumnID: col}})
+		}
 	}
 
 	delegate := delegate{}
@@ -154,6 +182,8 @@ func (s *Model) Update(msg tea.Msg) tea.Cmd {
 			s.help.SetFullHelp(false)
 			s.updateSizes()
 			return nil
+		case key.Matches(msg, defaultKeyMap.Reverse):
+			return s.handleReverse()
 		case key.Matches(msg, defaultKeyMap.Toggle):
 			return s.handleKeyToggle()
 		case key.Matches(msg, defaultKeyMap.Accept):
@@ -167,20 +197,26 @@ func (s *Model) Update(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
+func (s *Model) handleReverse() tea.Cmd {
+	item := s.list.SelectedItem().(*listItem)
+	item.SetReversed(!item.Reversed())
+	return nil
+}
+
 func (s *Model) handleKeyToggle() tea.Cmd {
 	item := s.list.SelectedItem().(*listItem)
-	if item.Sel == 0 {
+	if item.Selected() == 0 {
 		s.nSelected++
-		item.Sel = s.nSelected
+		item.SetSelected(s.nSelected)
 	} else {
 		for _, it := range s.list.Items() {
 			it := it.(*listItem)
-			if it.Sel > item.Sel {
-				it.Sel--
+			if it.Selected() > item.Selected() {
+				it.SetSelected(it.Selected() - 1)
 			}
 		}
 		s.nSelected--
-		item.Sel = 0
+		item.SetSelected(0)
 	}
 	return nil
 }

@@ -31,10 +31,19 @@ const (
 )
 
 var (
-	defaultSort = []ColumnID{ColIndex, ColHost}
+	defaultSort = []SortColumn{
+		{ColumnID: ColIndex},
+		{ColumnID: ColHost},
+	}
 
 	availSortColumns = []ColumnID{ColIndex, ColHost, ColAvgMs, ColJitter, ColPctLoss}
 )
+
+// SortColumn identifies a column to sort by.
+type SortColumn struct {
+	ColumnID
+	Reverse bool
+}
 
 // ColumnID identifies a column.
 type ColumnID int
@@ -189,14 +198,14 @@ type Model struct {
 	vp        viewport.Model
 	colWidths []int
 	rows      []Row
-	sortCols  []ColumnID
+	sortCols  []SortColumn
 }
 
 // New makes an empty ping result table with headers.
 func New() *Model {
 	return &Model{
 		colWidths: make([]int, len(columnSpecs)),
-		sortCols:  append([]ColumnID{}, defaultSort...),
+		sortCols:  append([]SortColumn{}, defaultSort...),
 	}
 }
 
@@ -221,20 +230,25 @@ func (t *Model) SetSize(width, height int) {
 }
 
 // Sort returns the current sort columns.
-func (t *Model) Sort() []ColumnID {
-	return append([]ColumnID{}, t.sortCols...)
+func (t *Model) Sort() []SortColumn {
+	return append([]SortColumn{}, t.sortCols...)
 }
 
 // SetSort sets the columns to sort the table by. Use without args to restore
 // the default.
-func (t *Model) SetSort(cols ...ColumnID) {
+func (t *Model) SetSort(cols ...SortColumn) {
 	if len(cols) == 0 {
-		t.sortCols = append([]ColumnID{}, defaultSort...)
+		t.sortCols = append([]SortColumn{}, defaultSort...)
 	}
 	t.sortCols = cols
 }
 
-func cmpKey(a, b any) int {
+func cmpKey(a, b any, reverse bool) (res int) {
+	defer func() {
+		if reverse {
+			res = -res
+		}
+	}()
 	switch a := a.(type) {
 	case int:
 		b := b.(int)
@@ -255,9 +269,9 @@ func cmpKey(a, b any) int {
 
 func (t *Model) cmpRows(a, b Row) int {
 	for _, col := range t.sortCols {
-		keyA := a.sortKeys()[col]
-		keyB := b.sortKeys()[col]
-		if res := cmpKey(keyA, keyB); res != 0 {
+		keyA := a.sortKeys()[col.ColumnID]
+		keyB := b.sortKeys()[col.ColumnID]
+		if res := cmpKey(keyA, keyB, col.Reverse); res != 0 {
 			return res
 		}
 	}
