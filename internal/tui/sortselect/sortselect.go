@@ -3,7 +3,6 @@ package sortselect
 import (
 	"fmt"
 	"io"
-	"log"
 	"slices"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -179,7 +178,6 @@ func (s *Model) Update(msg tea.Msg) tea.Cmd {
 	case tea.WindowSizeMsg:
 		s.resize(msg.Width, msg.Height)
 	case tea.KeyMsg:
-		log.Printf("Key = %v", msg)
 		switch {
 		case key.Matches(msg, defaultKeyMap.ShowFullHelp):
 			s.help.SetFullHelp(true)
