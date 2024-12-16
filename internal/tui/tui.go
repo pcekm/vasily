@@ -2,6 +2,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -39,6 +40,9 @@ type Options struct {
 	// TraceBackend is the backend to use for traces.
 	TraceBackend backend.Name
 
+	// TraceMaxTTL is the maximum ttl to trace.
+	TraceMaxTTL int
+
 	// ProbesPerHop is the number of times to probe for responses at each ttl.
 	ProbesPerHop int
 }
@@ -73,6 +77,13 @@ func (o *Options) traceBackend() backend.Name {
 		return backend.Name("udp")
 	}
 	return o.TraceBackend
+}
+
+func (o *Options) traceMaxTTL() int {
+	if o == nil {
+		return 0
+	}
+	return o.TraceMaxTTL
 }
 
 func (o *Options) probesPerHop() int {
@@ -210,9 +221,14 @@ func (m *Model) startTraceCmd(addr net.Addr) tea.Cmd {
 			opts := &tracer.Options{
 				Interval:     m.opts.traceInterval(),
 				ProbesPerHop: m.opts.probesPerHop(),
+				MaxTTL:       m.opts.traceMaxTTL(),
 			}
 			err := tracer.TraceRoute(m.opts.traceBackend(), util.AddrVersion(addr), addr, ch, opts)
 			if err != nil {
+				if errors.Is(err, tracer.ErrMaxTTL) {
+					log.Printf("Maximum TTL reached for %v", addr)
+					return nil
+				}
 				return fmt.Errorf("traceroute: %v: %v", addr, err)
 			}
 			return nil

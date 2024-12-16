@@ -33,6 +33,7 @@ var (
 		fmt.Sprintf("Interval between traceroute probes. May not be less than %v.", maxPingInterval))
 	pingBackend  = backend.FlagP("protocol", "P", "icmp", "Protocol to use for pings.")
 	traceBackend = backend.FlagP("trace_protocol", "T", "udp", "Protocol to use for traceroutes.")
+	maxTTL       = pflag.Int("max_ttl", 64, "Maximum path length to trace.")
 )
 
 // FlagVars.
@@ -72,6 +73,7 @@ func main() {
 		PingBackend:   *pingBackend,
 		TraceInterval: *traceInterval,
 		TraceBackend:  *traceBackend,
+		TraceMaxTTL:   *maxTTL,
 		ProbesPerHop:  *queries,
 	}
 	tbl, err := tui.New(pflag.Args(), opts)

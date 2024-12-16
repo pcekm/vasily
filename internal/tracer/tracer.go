@@ -23,6 +23,10 @@ const (
 	timeout = time.Second
 )
 
+var (
+	ErrMaxTTL = errors.New("maximum TTL reached")
+)
+
 // Options contains [TraceRoute] options.
 type Options struct {
 	// Interval is the time between route probes. Defaults to 1s.
@@ -69,9 +73,9 @@ type Step struct {
 	Host net.Addr
 }
 
-// TraceRoute finds the path to a host. Steps in the path will be returned one at a
-// time over the channel. The channel will be closed when the trace completes.
-// Steps may be returned in any order or not at all.
+// TraceRoute finds the path to a host. Steps in the path will be returned one
+// at a time over the channel. The channel will be closed when the trace
+// completes. Steps may be returned in any order or not at all.
 func TraceRoute(name backend.Name, ipVer util.IPVersion, dest net.Addr, res chan<- Step, opts *Options) error {
 	defer close(res)
 	conn, err := backend.New(name, ipVer)
@@ -81,13 +85,15 @@ func TraceRoute(name backend.Name, ipVer util.IPVersion, dest net.Addr, res chan
 	pkt := &backend.Packet{}
 	seen := make(map[string]bool)
 	tick := immediateTick(opts.interval())
+	var nextBasePort int
+	if conn, ok := conn.(backend.PortConn); ok {
+		nextBasePort = conn.SeqBasePort()
+	}
 	for tryNum := 0; tryNum < opts.probesPerHop(); tryNum++ {
-		if conn, ok := conn.(backend.PortConn); tryNum > 0 && ok {
-			conn.SetSeqBasePort(conn.SeqBasePort() + opts.maxTTL())
-		}
 		done := false
 		for ttl := 1; !done && ttl < opts.maxTTL(); ttl++ {
 			<-tick
+			nextBasePort++
 			pkt.Seq = ttl - 1
 			if err := conn.WriteTo(pkt, dest, backend.TTLOption{TTL: ttl}); err != nil {
 				return fmt.Errorf("error sending ping: %v", err)
@@ -114,8 +120,11 @@ func TraceRoute(name backend.Name, ipVer util.IPVersion, dest net.Addr, res chan
 			seen[k] = true
 			res <- Step{Pos: ttl, Host: peer}
 		}
+		if conn, ok := conn.(backend.PortConn); ok {
+			conn.SetSeqBasePort(nextBasePort)
+		}
 		if !done {
-			return fmt.Errorf("maximum TTL of %d reached", defaultMaxTTL)
+			return ErrMaxTTL
 		}
 	}
 	return nil
