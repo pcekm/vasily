@@ -6,6 +6,7 @@ import (
 	"cmp"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"slices"
 	"strconv"
@@ -29,41 +30,59 @@ const (
 	horizontalPadding = 1
 )
 
-type columnID int
+var (
+	defaultSort = []ColumnID{ColIndex, ColHost}
 
-// columnID values specified in the order they should appear in the table.
-const (
-	colIndex columnID = iota
-	colHost
-	colResults
-	colAvgMs
-	colJitter
-	colPctLoss
+	availSortColumns = []ColumnID{ColIndex, ColHost, ColAvgMs, ColJitter, ColPctLoss}
 )
 
-func (c columnID) String() string {
+// ColumnID identifies a column.
+type ColumnID int
+
+// ColumnID values specified in the order they should appear in the table.
+const (
+	ColIndex ColumnID = iota
+	ColHost
+	ColResults
+	ColAvgMs
+	ColJitter
+	ColPctLoss
+)
+
+func (c ColumnID) String() string {
 	switch c {
-	case colIndex:
-		return "colIndex"
-	case colHost:
-		return "colHost"
-	case colResults:
-		return "colResults"
-	case colAvgMs:
-		return "colAvgMs"
-	case colJitter:
-		return "colJitter"
-	case colPctLoss:
-		return "colPctLoss"
+	case ColIndex:
+		return "ColIndex"
+	case ColHost:
+		return "ColHost"
+	case ColResults:
+		return "ColResults"
+	case ColAvgMs:
+		return "ColAvgMs"
+	case ColJitter:
+		return "ColJitter"
+	case ColPctLoss:
+		return "ColPctLoss"
 	default:
 		return fmt.Sprintf("(unknown:%d)", c)
 	}
 }
 
+// Display returns a displayable title for this column.
+func (c ColumnID) Display() string {
+	spec := columnSpecs[slices.IndexFunc(columnSpecs, func(s columnSpec) bool { return s.ID == c })]
+	return strings.TrimSpace(spec.Title)
+}
+
+// AvailColumns are the columns available for sorting.
+func AvailColumns() []ColumnID {
+	return append([]ColumnID{}, availSortColumns...)
+}
+
 // Describes a column.
 type columnSpec struct {
 	// ID is the column ID.
-	ID columnID
+	ID ColumnID
 
 	// Title is the title displayed at the top of the column.
 	Title string
@@ -78,12 +97,12 @@ type columnSpec struct {
 
 var (
 	columnSpecs = []columnSpec{
-		{ID: colIndex, Title: "Hop", FixedWidth: 3},
-		{ID: colHost, Title: "Host", ProportionalWidth: 2},
-		{ID: colResults, Title: "Results", ProportionalWidth: 3},
-		{ID: colAvgMs, Title: "AvgMs", FixedWidth: 5},
-		{ID: colJitter, Title: "Jitter", FixedWidth: 6},
-		{ID: colPctLoss, Title: " Loss", FixedWidth: 5},
+		{ID: ColIndex, Title: "Hop", FixedWidth: 3},
+		{ID: ColHost, Title: "Host", ProportionalWidth: 2},
+		{ID: ColResults, Title: "Results", ProportionalWidth: 3},
+		{ID: ColAvgMs, Title: "AvgMs", FixedWidth: 5},
+		{ID: ColJitter, Title: "Jitter", FixedWidth: 6},
+		{ID: ColPctLoss, Title: " Loss", FixedWidth: 5},
 	}
 
 	headerStyle = lipgloss.NewStyle().
@@ -130,20 +149,29 @@ type Row struct {
 	Pinger *pinger.Pinger
 }
 
-func (r Row) cells() map[columnID]any {
+func (r Row) cells() map[ColumnID]any {
 	st := r.Pinger.Stats()
-	return map[columnID]any{
-		colIndex:   r.Index,
-		colHost:    r.DisplayHost,
-		colResults: r.Pinger,
-		colAvgMs:   st.AvgLatency,
-		colJitter:  st.StdDev,
-		colPctLoss: 100 * st.PacketLoss(),
+	return map[ColumnID]any{
+		ColIndex:   r.Index,
+		ColHost:    r.DisplayHost,
+		ColResults: r.Pinger,
+		ColAvgMs:   st.AvgLatency,
+		ColJitter:  st.StdDev,
+		ColPctLoss: 100 * st.PacketLoss(),
 	}
 }
 
-func cmpRows(a, b Row) int {
-	return cmpRowKeys(a.RowKey, b.RowKey)
+func (r Row) sortKeys() map[ColumnID]any {
+	st := r.Pinger.Stats()
+	return map[ColumnID]any{
+		ColIndex: r.Index,
+		ColHost:  r.DisplayHost,
+		// Not sortable:
+		// ColResults: r.Pinger,
+		ColAvgMs:   st.AvgLatency,
+		ColJitter:  st.StdDev,
+		ColPctLoss: 100 * st.PacketLoss(),
+	}
 }
 
 // RowKey uniquely identifies a row.
@@ -155,27 +183,20 @@ type RowKey struct {
 	Index int
 }
 
-func cmpRowKeys(a, b RowKey) int {
-	if a.Group < b.Group {
-		return -1
-	} else if a.Group > b.Group {
-		return 1
-	}
-	return cmp.Compare(a.Index, b.Index)
-}
-
 // Model contains the table information.
 type Model struct {
 	ready     bool
 	vp        viewport.Model
 	colWidths []int
 	rows      []Row
+	sortCols  []ColumnID
 }
 
 // New makes an empty ping result table with headers.
 func New() *Model {
 	return &Model{
 		colWidths: make([]int, len(columnSpecs)),
+		sortCols:  append([]ColumnID{}, defaultSort...),
 	}
 }
 
@@ -197,6 +218,50 @@ func (t *Model) SetSize(width, height int) {
 	t.vp.Width = width
 	t.vp.Height = height - 1
 	t.recalcColumnWidths()
+}
+
+// Sort returns the current sort columns.
+func (t *Model) Sort() []ColumnID {
+	return append([]ColumnID{}, t.sortCols...)
+}
+
+// SetSort sets the columns to sort the table by. Use without args to restore
+// the default.
+func (t *Model) SetSort(cols ...ColumnID) {
+	if len(cols) == 0 {
+		t.sortCols = append([]ColumnID{}, defaultSort...)
+	}
+	t.sortCols = cols
+}
+
+func cmpKey(a, b any) int {
+	switch a := a.(type) {
+	case int:
+		b := b.(int)
+		return cmp.Compare(a, b)
+	case string:
+		b := b.(string)
+		return cmp.Compare(a, b)
+	case time.Duration:
+		b := b.(time.Duration)
+		return cmp.Compare(a, b)
+	case float64:
+		b := b.(float64)
+		return cmp.Compare(a, b)
+	}
+	log.Panicf("Unhandled sort key type %T", a)
+	return 0
+}
+
+func (t *Model) cmpRows(a, b Row) int {
+	for _, col := range t.sortCols {
+		keyA := a.sortKeys()[col]
+		keyB := b.sortKeys()[col]
+		if res := cmpKey(keyA, keyB); res != 0 {
+			return res
+		}
+	}
+	return 0
 }
 
 func (t *Model) recalcColumnWidths() {
@@ -223,7 +288,6 @@ func (t *Model) recalcColumnWidths() {
 // AddRow adds a new row.
 func (t *Model) AddRow(r Row) {
 	t.rows = append(t.rows, r)
-	slices.SortStableFunc(t.rows, cmpRows)
 	t.UpdateRows()
 }
 
@@ -232,6 +296,7 @@ func (t *Model) UpdateRows() {
 	if !t.ready {
 		return
 	}
+	slices.SortStableFunc(t.rows, t.cmpRows)
 	lines := make([]string, len(t.rows))
 	for i, r := range t.rows {
 		// Collapse index numbers.
@@ -268,7 +333,7 @@ func (t *Model) renderRow(r Row) string {
 	var sb strings.Builder
 	for i, c := range columnSpecs {
 		// A special case for zero index numbers.
-		if c.ID == colIndex && cells[c.ID] == 0 {
+		if c.ID == ColIndex && cells[c.ID] == 0 {
 			t.renderCell("", t.colWidths[i], &sb)
 			continue
 		}

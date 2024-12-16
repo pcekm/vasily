@@ -16,6 +16,7 @@ import (
 	"github.com/pcekm/graphping/internal/pinger"
 	"github.com/pcekm/graphping/internal/tracer"
 	"github.com/pcekm/graphping/internal/tui/help"
+	"github.com/pcekm/graphping/internal/tui/sortselect"
 	"github.com/pcekm/graphping/internal/tui/table"
 	"github.com/pcekm/graphping/internal/util"
 )
@@ -89,11 +90,21 @@ type traceStepMsg struct {
 	next <-chan tracer.Step
 }
 
+type displayPane int
+
+// displayPane values.
+const (
+	paneTable displayPane = iota // default
+	paneSort
+)
+
 // Model is the main text UI model.
 type Model struct {
 	width    int
 	height   int
+	display  displayPane
 	table    *table.Model
+	sort     *sortselect.Model
 	hosts    []string
 	help     *help.Model
 	fullHelp bool
@@ -104,8 +115,10 @@ type Model struct {
 
 // New creates a new model.
 func New(hosts []string, opts *Options) (*Model, error) {
+	tbl := table.New()
 	m := &Model{
-		table: table.New(),
+		table: tbl,
+		sort:  sortselect.New(tbl.Sort()),
 		hosts: hosts,
 		help:  help.New(defaultKeyMap),
 		opts:  opts,
@@ -117,6 +130,7 @@ func New(hosts []string, opts *Options) (*Model, error) {
 func (m *Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
 		m.updateRows(updateRows{}),
+		m.sort.Init(),
 		m.help.Init(),
 	}
 	for _, h := range m.hosts {
@@ -139,6 +153,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.table.Update(msg),
 		m.help.Update(msg),
 	}
+
+	if _, ok := msg.(tea.KeyMsg); !ok || m.display == paneSort {
+		cmds = append(cmds, m.sort.Update(msg))
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		cmds = append(cmds, m.handleKeyMsg(msg))
@@ -148,6 +167,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.updateTraceStep(msg))
 	case updateRows:
 		cmds = append(cmds, m.updateRows(msg))
+	case sortselect.Done:
+		m.display = paneTable
+		m.table.SetSort(msg.Columns...)
+	case sortselect.Cancel:
+		m.display = paneTable
 	case error:
 		cmds = append(cmds, m.handleError(msg))
 	}
@@ -231,7 +255,14 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 	add := func(cmd tea.Cmd) {
 		cmds = append(cmds, cmd)
 	}
+
+	if m.display == paneSort {
+		return nil
+	}
+
 	switch {
+	case key.Matches(msg, defaultKeyMap.Sort):
+		m.display = paneSort
 	case key.Matches(msg, defaultKeyMap.Quit):
 		add(tea.Quit)
 	case key.Matches(msg, defaultKeyMap.Suspend):
@@ -258,7 +289,8 @@ func (m *Model) setFullHelp(b bool) tea.Cmd {
 func (m *Model) updateSizes() {
 	m.help.SetWidth(m.width)
 	helpHeight := m.help.GetHeight()
-	m.table.SetSize(m.width, m.height-helpHeight)
+	mainHeight := m.height - helpHeight
+	m.table.SetSize(m.width, mainHeight)
 }
 
 func (m *Model) handleResize(msg tea.WindowSizeMsg) tea.Cmd {
@@ -268,7 +300,14 @@ func (m *Model) handleResize(msg tea.WindowSizeMsg) tea.Cmd {
 	return nil
 }
 
+type viewer interface {
+	View() string
+}
+
 // View renders the model.
 func (m *Model) View() string {
+	if m.display == paneSort {
+		return m.sort.View()
+	}
 	return lipgloss.JoinVertical(lipgloss.Top, m.table.View(), m.help.View())
 }
