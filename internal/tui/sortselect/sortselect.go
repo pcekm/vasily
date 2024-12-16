@@ -3,6 +3,7 @@ package sortselect
 import (
 	"fmt"
 	"io"
+	"log"
 	"slices"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -26,6 +27,7 @@ type keyMap struct {
 	Accept  key.Binding
 	Esc     key.Binding
 	Reverse key.Binding
+	Clear   key.Binding
 }
 
 func (k *keyMap) ShortHelp() []key.Binding {
@@ -35,7 +37,7 @@ func (k *keyMap) ShortHelp() []key.Binding {
 func (k *keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.CursorUp, k.CursorDown, k.NextPage, k.PrevPage, k.GoToStart, k.GoToEnd},
-		{k.Toggle, k.Reverse, k.Accept, k.Esc, k.CloseFullHelp}}
+		{k.Toggle, k.Reverse, k.Clear, k.Accept, k.Esc, k.CloseFullHelp}}
 }
 
 var defaultKeyMap = keyMap{
@@ -55,6 +57,10 @@ var defaultKeyMap = keyMap{
 	Reverse: key.NewBinding(
 		key.WithKeys("-", "r"),
 		key.WithHelp("-/r", "reverse"),
+	),
+	Clear: key.NewBinding(
+		key.WithKeys("ctrl+d"),
+		key.WithHelp("ctrl+d", "clear all"),
 	),
 }
 
@@ -173,6 +179,7 @@ func (s *Model) Update(msg tea.Msg) tea.Cmd {
 	case tea.WindowSizeMsg:
 		s.resize(msg.Width, msg.Height)
 	case tea.KeyMsg:
+		log.Printf("Key = %v", msg)
 		switch {
 		case key.Matches(msg, defaultKeyMap.ShowFullHelp):
 			s.help.SetFullHelp(true)
@@ -186,6 +193,8 @@ func (s *Model) Update(msg tea.Msg) tea.Cmd {
 			return s.handleReverse()
 		case key.Matches(msg, defaultKeyMap.Toggle):
 			return s.handleKeyToggle()
+		case key.Matches(msg, defaultKeyMap.Clear):
+			return s.handleClear()
 		case key.Matches(msg, defaultKeyMap.Accept):
 			return s.handleKeyAccept()
 		case key.Matches(msg, defaultKeyMap.Esc):
@@ -218,6 +227,16 @@ func (s *Model) handleKeyToggle() tea.Cmd {
 		s.nSelected--
 		item.SetSelected(0)
 	}
+	return nil
+}
+
+func (s *Model) handleClear() tea.Cmd {
+	for _, item := range s.list.Items() {
+		item := item.(*listItem)
+		item.SetSelected(0)
+		item.SetReversed(false)
+	}
+	s.nSelected = 0
 	return nil
 }
 
