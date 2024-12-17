@@ -262,6 +262,8 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 		add(tea.Quit)
 	case "ctrl+z":
 		add(tea.Suspend)
+	case "ctrl+l":
+		add(tea.ClearScreen)
 	}
 
 	return tea.Batch(cmds...)
