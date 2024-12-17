@@ -14,7 +14,10 @@ import (
 	"time"
 
 	"github.com/pcekm/graphping/internal/pinger"
+	"github.com/pcekm/graphping/internal/tui/help"
+	"github.com/pcekm/graphping/internal/tui/nav"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -184,6 +187,7 @@ func (r Row) sortKeys() map[ColumnID]any {
 }
 
 // RowKey uniquely identifies a row.
+// TODO: Is this necessary now? Can it be rolled into Row?
 type RowKey struct {
 	// Group is used to group related pings, such as all the hosts in a path.
 	Group string
@@ -194,11 +198,13 @@ type RowKey struct {
 
 // Model contains the table information.
 type Model struct {
-	ready     bool
-	vp        viewport.Model
-	colWidths []int
-	rows      []Row
-	sortCols  []SortColumn
+	ready         bool
+	width, height int
+	vp            viewport.Model
+	colWidths     []int
+	rows          []Row
+	sortCols      []SortColumn
+	help          *help.Model
 }
 
 // New makes an empty ping result table with headers.
@@ -206,26 +212,60 @@ func New() *Model {
 	return &Model{
 		colWidths: make([]int, len(columnSpecs)),
 		sortCols:  append([]SortColumn{}, defaultSort...),
+		help:      help.New(defaultKeyMap),
 	}
 }
 
 func (t *Model) Update(msg tea.Msg) tea.Cmd {
-	var cmds []tea.Cmd
+	var cmd tea.Cmd
+
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		cmd = t.handleKeyMsg(msg)
+	case tea.WindowSizeMsg:
+		cmd = t.handleWindowSizeMsg(msg)
+	}
+
 	var vpCmd tea.Cmd
 	t.vp, vpCmd = t.vp.Update(msg)
-	cmds = append(cmds, vpCmd)
-	return tea.Batch(cmds...)
+	return tea.Batch(cmd, vpCmd)
 }
 
-// SetSize sets the table size. It must be called at least once in order for
-// anything to be displayed.
-func (t *Model) SetSize(width, height int) {
+func (t *Model) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
+	// Reset full help display after any keypress.
+	origHelp := t.help.FullHelp()
+	t.help.SetFullHelp(false)
+	t.updateSizes()
+
+	var cmd tea.Cmd
+	switch {
+	case key.Matches(msg, defaultKeyMap.Quit):
+		cmd = tea.Quit
+	case key.Matches(msg, defaultKeyMap.Sort):
+		cmd = nav.Go(nav.SortSelect)
+	case key.Matches(msg, defaultKeyMap.Help):
+		t.help.SetFullHelp(!origHelp)
+		t.updateSizes()
+	}
+
+	return cmd
+}
+
+func (t *Model) handleWindowSizeMsg(msg tea.WindowSizeMsg) tea.Cmd {
+	t.width, t.height = msg.Width, msg.Height
+	t.updateSizes()
+	return nil
+}
+
+func (t *Model) updateSizes() {
+	t.help.SetWidth(t.width)
+	hh := t.help.GetHeight()
 	if !t.ready {
-		t.vp = viewport.New(width, height-1)
+		t.vp = viewport.New(t.width, t.height-hh-1)
 		t.ready = true
 	}
-	t.vp.Width = width
-	t.vp.Height = height - 1
+	t.vp.Width = t.width
+	t.vp.Height = t.height - hh - 1
 	t.recalcColumnWidths()
 }
 
@@ -409,5 +449,5 @@ func (t *Model) View() string {
 	if !t.ready {
 		return ""
 	}
-	return lipgloss.JoinVertical(lipgloss.Top, t.headerView(), t.vp.View())
+	return lipgloss.JoinVertical(lipgloss.Top, t.headerView(), t.vp.View(), t.help.View())
 }

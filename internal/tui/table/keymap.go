@@ -1,4 +1,4 @@
-package tui
+package table
 
 import "github.com/charmbracelet/bubbles/key"
 
@@ -8,13 +8,10 @@ var defaultKeyMap = keyMap{
 		key.WithHelp("s", "sorting"),
 	),
 	Quit: key.NewBinding(
-		key.WithKeys("q", "ctrl+c"),
+		key.WithKeys("q"),
 		key.WithHelp("q", "quit"),
 	),
-	Suspend: key.NewBinding(
-		key.WithKeys("ctrl+z"),
-		key.WithHelp("ctrl+z", "suspend"),
-	),
+	// TODO: Should this be a global keymap?
 	Help: key.NewBinding(
 		key.WithKeys("f1", "?"),
 		key.WithHelp("?", "help"),
@@ -22,11 +19,9 @@ var defaultKeyMap = keyMap{
 }
 
 type keyMap struct {
-	Sort    key.Binding
-	Toggle  key.Binding
-	Quit    key.Binding
-	Suspend key.Binding
-	Help    key.Binding
+	Sort key.Binding
+	Quit key.Binding
+	Help key.Binding
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {

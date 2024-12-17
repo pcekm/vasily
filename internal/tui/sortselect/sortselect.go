@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/pcekm/graphping/internal/tui/help"
+	"github.com/pcekm/graphping/internal/tui/nav"
 	"github.com/pcekm/graphping/internal/tui/table"
 )
 
@@ -126,25 +127,21 @@ func (d delegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 	return nil
 }
 
-// Done is a message generated when the user accepts the newly selected sort
-// columns.
-type Done struct {
-	Columns []table.SortColumn
-}
-
-// Cancel is a message generated when the user cancels sort selection.
-type Cancel struct{}
+// SortUpdater is a function used to update the sort order.
+type SortUpdater func([]table.SortColumn)
 
 // Model gets the user to select sort columns.
 type Model struct {
 	list          list.Model
+	table         *table.Model
 	help          *help.Model
 	width, height int
 	nSelected     int
 }
 
 // New creates a new Model.
-func New(curSelected []table.SortColumn) *Model {
+func New(tbl *table.Model) *Model {
+	curSelected := tbl.Sort()
 	var items []list.Item
 	for _, col := range table.AvailColumns() {
 		j := slices.IndexFunc(curSelected, func(c table.SortColumn) bool { return c.ColumnID == col })
@@ -164,6 +161,7 @@ func New(curSelected []table.SortColumn) *Model {
 
 	return &Model{
 		list:      lst,
+		table:     tbl,
 		help:      help.New(&defaultKeyMap),
 		nSelected: len(curSelected),
 	}
@@ -196,7 +194,7 @@ func (s *Model) Update(msg tea.Msg) tea.Cmd {
 		case key.Matches(msg, defaultKeyMap.Accept):
 			return s.handleKeyAccept()
 		case key.Matches(msg, defaultKeyMap.Esc):
-			return func() tea.Msg { return Cancel{} }
+			return nav.Go(nav.Main)
 		}
 	}
 	var cmd tea.Cmd
@@ -239,16 +237,17 @@ func (s *Model) handleClear() tea.Cmd {
 }
 
 func (s *Model) handleKeyAccept() tea.Cmd {
-	res := Done{}
+	var cols []table.SortColumn
 	for _, item := range s.list.Items() {
 		if item := item.(*listItem); item.Selected() > 0 {
 			i := item.Selected() - 1
-			res.Columns = slices.Grow(res.Columns, i+1)
-			res.Columns = res.Columns[:i+1]
-			res.Columns[i] = item.Col
+			cols = slices.Grow(cols, i+1)
+			cols = cols[:i+1]
+			cols[i] = item.Col
 		}
 	}
-	return func() tea.Msg { return res }
+	s.table.SetSort(cols...)
+	return nav.Go(nav.Main)
 }
 
 func (s *Model) resize(width, height int) {

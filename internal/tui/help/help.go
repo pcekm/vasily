@@ -36,9 +36,14 @@ func New(km help.KeyMap) *Model {
 	return m
 }
 
+// FullHelp determines if the full help is displayed.
+func (m *Model) FullHelp() bool {
+	return m.keyHelp.ShowAll
+}
+
 // SetFullHelp switches between the small and the full help displays.
 func (m *Model) SetFullHelp(b bool) {
-	m.keyHelp.ShowAll = !m.keyHelp.ShowAll
+	m.keyHelp.ShowAll = b
 }
 
 // GetHeight returns the natural height of the help display.
