@@ -264,6 +264,7 @@ func (t *Model) Sort() []SortColumn {
 func (t *Model) SetSort(cols ...SortColumn) {
 	if len(cols) == 0 {
 		t.sortCols = append([]SortColumn{}, defaultSort...)
+		return
 	}
 	t.sortCols = cols
 }

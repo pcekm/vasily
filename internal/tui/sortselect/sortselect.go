@@ -266,8 +266,10 @@ func (s *Model) handleKeyAccept() tea.Cmd {
 	for _, item := range s.list.Items() {
 		if item := item.(*listItem); item.Selected() > 0 {
 			i := item.Selected() - 1
-			cols = slices.Grow(cols, i+1)
-			cols = cols[:i+1]
+			if len(cols) <= i {
+				cols = slices.Grow(cols, i+1)
+				cols = cols[:i+1]
+			}
 			cols[i] = item.Col
 		}
 	}
