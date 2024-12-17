@@ -15,6 +15,13 @@ const (
 	numSequenceNos = 1 << 16
 )
 
+// MaybeSetDefault sets field to val if field is zero.
+func MaybeSetDefault[T comparable](field *T, val T) {
+	if *field == *new(T) {
+		*field = val
+	}
+}
+
 // IDGen generates ICMP echo IDs.
 type IDGen interface {
 	// GenID returns an ICMP echo request.

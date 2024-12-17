@@ -17,11 +17,15 @@ import (
 	"github.com/pcekm/graphping/internal/tui/nav"
 	"github.com/pcekm/graphping/internal/tui/sortselect"
 	"github.com/pcekm/graphping/internal/tui/table"
+	"github.com/pcekm/graphping/internal/tui/theme"
 	"github.com/pcekm/graphping/internal/util"
 )
 
 // Options contain main program options.
 type Options struct {
+	// Theme contains a UI theme.
+	Theme *theme.Theme
+
 	// Trace activates traceroute mode. Traces the path to each host and pings
 	// each step in the path.
 	Trace bool
@@ -45,50 +49,19 @@ type Options struct {
 	ProbesPerHop int
 }
 
-func (o *Options) trace() bool {
-	return o != nil && o.Trace
-}
-
-func (o *Options) pingInterval() time.Duration {
-	if o == nil || o.PingInterval == 0 {
-		return time.Second
-	}
-	return o.PingInterval
-}
-
-func (o *Options) pingBackend() backend.Name {
-	if o == nil || o.PingBackend == "" {
-		return backend.Name("icmp")
-	}
-	return o.PingBackend
-}
-
-func (o *Options) traceInterval() time.Duration {
-	if o == nil || o.TraceInterval == 0 {
-		return time.Second
-	}
-	return o.TraceInterval
-}
-
-func (o *Options) traceBackend() backend.Name {
-	if o == nil || o.TraceBackend == "" {
-		return backend.Name("udp")
-	}
-	return o.TraceBackend
-}
-
-func (o *Options) traceMaxTTL() int {
+func setOptionDefaults(o *Options) *Options {
 	if o == nil {
-		return 0
+		o = &Options{}
 	}
-	return o.TraceMaxTTL
-}
+	util.MaybeSetDefault(&o.Theme, &theme.Default)
+	util.MaybeSetDefault(&o.PingInterval, time.Second)
+	util.MaybeSetDefault(&o.PingBackend, "icmp")
+	util.MaybeSetDefault(&o.TraceInterval, time.Second)
+	util.MaybeSetDefault(&o.TraceBackend, "udp")
+	util.MaybeSetDefault(&o.TraceMaxTTL, 64)
+	util.MaybeSetDefault(&o.ProbesPerHop, 3)
 
-func (o *Options) probesPerHop() int {
-	if o == nil || o.ProbesPerHop == 0 {
-		return 3
-	}
-	return o.ProbesPerHop
+	return o
 }
 
 type updateRows struct{}
@@ -110,11 +83,12 @@ type Model struct {
 
 // New creates a new model.
 func New(hosts []string, opts *Options) (*Model, error) {
-	tbl := table.New()
+	opts = setOptionDefaults(opts)
+	tbl := table.New(opts.Theme)
 	m := &Model{
 		focus: nav.Main,
 		table: tbl,
-		sort:  sortselect.New(tbl),
+		sort:  sortselect.New(opts.Theme, tbl),
 		hosts: hosts,
 		opts:  opts,
 	}
@@ -132,7 +106,7 @@ func (m *Model) Init() tea.Cmd {
 		if err != nil {
 			log.Printf("Error looking up %q: %v", h, err)
 		}
-		if m.opts.trace() {
+		if m.opts.Trace {
 			cmds = append(cmds, m.startTraceCmd(addr))
 		} else {
 			cmds = append(cmds, m.startPingerCmd(table.RowKey{Group: h}, addr))
@@ -174,8 +148,8 @@ func (m *Model) handleError(err error) tea.Cmd {
 // Returns a command that starts running a new ping.
 func (m *Model) startPingerCmd(key table.RowKey, target net.Addr) tea.Cmd {
 	return func() tea.Msg {
-		ping, err := pinger.New(m.opts.pingBackend(), util.AddrVersion(target), target, &pinger.Options{
-			Interval: m.opts.pingInterval(),
+		ping, err := pinger.New(m.opts.PingBackend, util.AddrVersion(target), target, &pinger.Options{
+			Interval: m.opts.PingInterval,
 		})
 		if err != nil {
 			return err
@@ -196,11 +170,11 @@ func (m *Model) startTraceCmd(addr net.Addr) tea.Cmd {
 	return tea.Batch(
 		func() tea.Msg {
 			opts := &tracer.Options{
-				Interval:     m.opts.traceInterval(),
-				ProbesPerHop: m.opts.probesPerHop(),
-				MaxTTL:       m.opts.traceMaxTTL(),
+				Interval:     m.opts.TraceInterval,
+				ProbesPerHop: m.opts.ProbesPerHop,
+				MaxTTL:       m.opts.TraceMaxTTL,
 			}
-			err := tracer.TraceRoute(m.opts.traceBackend(), util.AddrVersion(addr), addr, ch, opts)
+			err := tracer.TraceRoute(m.opts.TraceBackend, util.AddrVersion(addr), addr, ch, opts)
 			if err != nil {
 				if errors.Is(err, tracer.ErrMaxTTL) {
 					log.Printf("Maximum TTL reached for %v", addr)
@@ -238,7 +212,7 @@ func (m *Model) updateTraceStep(msg traceStepMsg) tea.Cmd {
 
 func (m *Model) updateRows(updateRows) tea.Cmd {
 	m.table.UpdateRows()
-	return tea.Tick(m.opts.pingInterval(), func(time.Time) tea.Msg {
+	return tea.Tick(m.opts.PingInterval, func(time.Time) tea.Msg {
 		return updateRows{}
 	})
 }

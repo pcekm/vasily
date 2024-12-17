@@ -5,35 +5,38 @@ import (
 	"github.com/charmbracelet/bubbles/help"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/pcekm/graphping/internal/tui/theme"
 )
 
 var (
-	shortBoxStyle = lipgloss.NewStyle().
-			Padding(0, 1).
-			AlignHorizontal(lipgloss.Right)
-	fullBoxStyle = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder(), true, false, false, false).
-			BorderForeground(lipgloss.Color("#555555")).
-			Padding(0, 1)
+	shortBoxStyleBase = lipgloss.NewStyle().
+				Padding(0, 1).
+				AlignHorizontal(lipgloss.Right)
+	fullBoxStyleBase = lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder(), true, false, false, false).
+				BorderForeground(lipgloss.Color("#555555")).
+				Padding(0, 1)
 )
 
 type Model struct {
 	keyMap  help.KeyMap
 	keyHelp help.Model
+	theme   *theme.Theme
 	width   int
 }
 
-func New(km help.KeyMap) *Model {
+func New(theme *theme.Theme, km help.KeyMap) *Model {
 	m := &Model{
 		keyMap:  km,
 		keyHelp: help.New(),
+		theme:   theme,
 	}
-	m.keyHelp.Styles.FullKey = m.keyHelp.Styles.FullKey.
-		Bold(true).
-		Foreground(lipgloss.Color("#cccccc"))
-	m.keyHelp.Styles.FullDesc = m.keyHelp.Styles.FullDesc.
-		Bold(false).
-		Foreground(lipgloss.Color("#aaaaaa"))
+	m.keyHelp.Styles.FullKey = theme.Text.Important.Inherit(m.keyHelp.Styles.FullKey).
+		Foreground(theme.Colors.Secondary)
+	m.keyHelp.Styles.FullDesc = theme.Text.Normal.Inherit(m.keyHelp.Styles.FullDesc)
+	m.keyHelp.Styles.ShortKey = theme.Text.Normal.Inherit(m.keyHelp.Styles.ShortKey).
+		Foreground(theme.Colors.Secondary)
+	m.keyHelp.Styles.ShortDesc = theme.Text.Unimportant.Inherit(m.keyHelp.Styles.ShortDesc)
 	return m
 }
 
@@ -60,9 +63,9 @@ func (m *Model) SetWidth(width int) {
 
 func (m *Model) style() lipgloss.Style {
 	if m.keyHelp.ShowAll {
-		return fullBoxStyle
+		return fullBoxStyleBase.Inherit(m.theme.Text.Normal)
 	}
-	return shortBoxStyle
+	return shortBoxStyleBase.Inherit(m.theme.Text.Normal)
 }
 
 // Init is run in the parent's Init(). (Currently a no-op.)

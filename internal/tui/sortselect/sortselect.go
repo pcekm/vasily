@@ -12,13 +12,7 @@ import (
 	"github.com/pcekm/graphping/internal/tui/help"
 	"github.com/pcekm/graphping/internal/tui/nav"
 	"github.com/pcekm/graphping/internal/tui/table"
-)
-
-var (
-	normalStyle  = lipgloss.NewStyle()
-	focusedStyle = normalStyle.
-			Foreground(lipgloss.Color("#ffffff")).
-			Bold(true)
+	"github.com/pcekm/graphping/internal/tui/theme"
 )
 
 type keyMap struct {
@@ -93,13 +87,17 @@ func (i listItem) FilterValue() string {
 	return i.Col.Display()
 }
 
-type delegate struct{}
+type delegate struct {
+	maxItemWidth int
+	normal       lipgloss.Style
+	highlighted  lipgloss.Style
+}
 
 func (d delegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
 	it := item.(*listItem)
-	style := normalStyle
+	style := d.normal
 	if m.Index() == index {
-		style = focusedStyle
+		style = d.highlighted
 	}
 	sel := " "
 	if it.Selected() > 0 {
@@ -112,7 +110,9 @@ func (d delegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
 			rev = "▼"
 		}
 	}
-	fmt.Fprintf(w, style.Render("[%s] %s %s"), sel, rev, it.Title())
+	width := 6 + d.maxItemWidth
+	line := fmt.Sprintf("[%s] %s %s", sel, rev, it.Title())
+	fmt.Fprint(w, style.Render(lipgloss.PlaceHorizontal(width, lipgloss.Left, line, lipgloss.WithWhitespaceChars(" "))))
 }
 
 func (d delegate) Height() int {
@@ -132,6 +132,7 @@ type SortUpdater func([]table.SortColumn)
 
 // Model gets the user to select sort columns.
 type Model struct {
+	theme         *theme.Theme
 	list          list.Model
 	table         *table.Model
 	help          *help.Model
@@ -140,8 +141,9 @@ type Model struct {
 }
 
 // New creates a new Model.
-func New(tbl *table.Model) *Model {
+func New(theme *theme.Theme, tbl *table.Model) *Model {
 	curSelected := tbl.Sort()
+	maxWidth := 0
 	var items []list.Item
 	for _, col := range table.AvailColumns() {
 		j := slices.IndexFunc(curSelected, func(c table.SortColumn) bool { return c.ColumnID == col })
@@ -150,19 +152,34 @@ func New(tbl *table.Model) *Model {
 		} else {
 			items = append(items, &listItem{Col: table.SortColumn{ColumnID: col}})
 		}
+		if n := len(col.Display()); n > maxWidth {
+			maxWidth = n
+		}
 	}
 
-	delegate := delegate{}
+	delegate := delegate{
+		maxItemWidth: maxWidth,
+		normal:       theme.Text.Normal.Padding(0, 1),
+		highlighted: theme.Text.Normal.
+			Foreground(theme.Colors.OnSecondary).
+			Background(theme.Colors.Secondary).
+			Padding(0, 1),
+	}
 	lst := list.New(items, delegate, 0, 0)
 	lst.DisableQuitKeybindings()
 	lst.SetFilteringEnabled(false)
 	lst.SetShowStatusBar(false)
 	lst.SetShowHelp(false)
+	lst.Styles.Title = theme.Text.Important.
+		Padding(0, 1).
+		Foreground(theme.Colors.OnPrimary).
+		Background(theme.Colors.Primary)
 
 	return &Model{
+		theme:     theme,
 		list:      lst,
 		table:     tbl,
-		help:      help.New(&defaultKeyMap),
+		help:      help.New(theme, &defaultKeyMap),
 		nSelected: len(curSelected),
 	}
 }
@@ -265,6 +282,10 @@ func (s *Model) resize(width, height int) {
 }
 
 func (s *Model) updateSizes() {
+	s.list.Styles.TitleBar = s.theme.Text.Normal.
+		Foreground(s.theme.Colors.OnPrimary).
+		Background(s.theme.Colors.Primary).
+		Width(s.width)
 	s.help.SetWidth(s.width)
 	hh := s.help.GetHeight()
 	s.list.SetSize(s.width, s.height-hh)

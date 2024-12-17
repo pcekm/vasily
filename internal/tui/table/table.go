@@ -16,6 +16,7 @@ import (
 	"github.com/pcekm/graphping/internal/pinger"
 	"github.com/pcekm/graphping/internal/tui/help"
 	"github.com/pcekm/graphping/internal/tui/nav"
+	"github.com/pcekm/graphping/internal/tui/theme"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -117,28 +118,10 @@ var (
 		{ID: ColPctLoss, Title: " Loss", FixedWidth: 5},
 	}
 
-	headerStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#cccccc")).
-			Background(lipgloss.Color("#1F326F")).
+	headerStyleBase = lipgloss.NewStyle().
 			Padding(0, horizontalPadding)
-	cellStyle = lipgloss.NewStyle().
+	cellStyleBase = lipgloss.NewStyle().
 			Padding(0, horizontalPadding)
-
-	latencyColors = []lipgloss.Style{
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#3abb46")).Inline(true),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#6faa1e")).Inline(true),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#8d9800")).Inline(true),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#a18400")).Inline(true),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#ae7006")).Inline(true),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#b45d21")).Inline(true),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#b34a34")).Inline(true),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#ab3c45")).Inline(true),
-	}
-	statusErrStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#cccccc")).
-			Background(lipgloss.Color("#ab3c45")).
-			Inline(true)
 
 	bars     = []string{"▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"}
 	statuses = map[pinger.ResultType]string{
@@ -198,6 +181,7 @@ type RowKey struct {
 
 // Model contains the table information.
 type Model struct {
+	theme         *theme.Theme
 	ready         bool
 	width, height int
 	vp            viewport.Model
@@ -208,11 +192,12 @@ type Model struct {
 }
 
 // New makes an empty ping result table with headers.
-func New() *Model {
+func New(theme *theme.Theme) *Model {
 	return &Model{
+		theme:     theme,
 		colWidths: make([]int, len(columnSpecs)),
 		sortCols:  append([]SortColumn{}, defaultSort...),
-		help:      help.New(defaultKeyMap),
+		help:      help.New(theme, defaultKeyMap),
 	}
 }
 
@@ -322,7 +307,7 @@ func (t *Model) recalcColumnWidths() {
 	fixedTot := 0
 	propTot := 0.0
 	for _, c := range columnSpecs {
-		fixedTot += cellStyle.GetHorizontalPadding()
+		fixedTot += t.cellStyle().GetHorizontalPadding()
 		if c.FixedWidth != 0 {
 			fixedTot += c.FixedWidth
 		} else {
@@ -410,7 +395,7 @@ func (t *Model) renderCell(v any, width int, out io.StringWriter) {
 	case *pinger.Pinger:
 		s = t.renderLatencies(width, v)
 	}
-	out.WriteString(cellStyle.Width(width + cellStyle.GetHorizontalPadding()).Render(s))
+	out.WriteString(t.cellStyle().Width(width + t.cellStyle().GetHorizontalPadding()).Render(s))
 }
 
 func (t *Model) renderLatencies(width int, p *pinger.Pinger) string {
@@ -419,11 +404,13 @@ func (t *Model) renderLatencies(width int, p *pinger.Pinger) string {
 	for _, r := range p.RevResults() {
 		frac := math.Min(1, float64(r.Latency)/float64(graphMax))
 		barIdx := int(frac * float64(len(bars)-1))
-		c := latencyColors[barIdx].Render(bars[barIdx])
+		c := t.theme.Text.Normal.
+			Foreground(t.theme.Heatmap.At(frac)).
+			Render(bars[barIdx])
 		if r.Type != pinger.Success {
 			c = statuses[r.Type]
 			if r.Type != pinger.Waiting {
-				c = statusErrStyle.Render(c)
+				c = t.errStyle().Render(c)
 			}
 		}
 		charIdx := width - i - 1
@@ -440,9 +427,25 @@ func (t *Model) headerView() string {
 	var sb strings.Builder
 	for i, c := range columnSpecs {
 		width := t.colWidths[i]
-		sb.WriteString(headerStyle.Width(width + 2*horizontalPadding).Render(rpad(width, c.Title)))
+		sb.WriteString(t.headerStyle().Width(width + 2*horizontalPadding).Render(rpad(width, c.Title)))
 	}
 	return sb.String()
+}
+
+func (t *Model) headerStyle() lipgloss.Style {
+	return headerStyleBase.Inherit(t.theme.Text.Important).
+		Foreground(t.theme.Colors.OnPrimary).
+		Background(t.theme.Colors.Primary)
+}
+
+func (t *Model) cellStyle() lipgloss.Style {
+	return cellStyleBase.Inherit(t.theme.Text.Normal)
+}
+
+func (t *Model) errStyle() lipgloss.Style {
+	return t.theme.Text.Normal.
+		Foreground(t.theme.Colors.OnError).
+		Background(t.theme.Colors.Error)
 }
 
 func (t *Model) View() string {
