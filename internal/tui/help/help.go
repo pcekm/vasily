@@ -12,7 +12,8 @@ var (
 			Padding(0, 1).
 			AlignHorizontal(lipgloss.Right)
 	fullBoxStyle = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder(), true).
+			Border(lipgloss.NormalBorder(), true, false, false, false).
+			BorderForeground(lipgloss.Color("#555555")).
 			Padding(0, 1)
 )
 
