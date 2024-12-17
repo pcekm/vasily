@@ -176,26 +176,7 @@ func (s *Model) Update(msg tea.Msg) tea.Cmd {
 	case tea.WindowSizeMsg:
 		s.resize(msg.Width, msg.Height)
 	case tea.KeyMsg:
-		switch {
-		case key.Matches(msg, defaultKeyMap.ShowFullHelp):
-			s.help.SetFullHelp(true)
-			s.updateSizes()
-			return nil
-		case key.Matches(msg, defaultKeyMap.CloseFullHelp):
-			s.help.SetFullHelp(false)
-			s.updateSizes()
-			return nil
-		case key.Matches(msg, defaultKeyMap.Reverse):
-			return s.handleReverse()
-		case key.Matches(msg, defaultKeyMap.Toggle):
-			return s.handleKeyToggle()
-		case key.Matches(msg, defaultKeyMap.Clear):
-			return s.handleClear()
-		case key.Matches(msg, defaultKeyMap.Accept):
-			return s.handleKeyAccept()
-		case key.Matches(msg, defaultKeyMap.Esc):
-			return nav.Go(nav.Main)
-		}
+		return s.handleKeyMsg(msg)
 	}
 	var cmd tea.Cmd
 	s.list, cmd = s.list.Update(msg)
@@ -206,6 +187,33 @@ func (s *Model) handleReverse() tea.Cmd {
 	item := s.list.SelectedItem().(*listItem)
 	item.SetReversed(!item.Reversed())
 	return nil
+}
+
+func (s *Model) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
+	origHelp := s.help.FullHelp()
+	s.help.SetFullHelp(false)
+	s.updateSizes()
+
+	switch {
+	case key.Matches(msg, defaultKeyMap.ShowFullHelp, defaultKeyMap.CloseFullHelp):
+		s.help.SetFullHelp(!origHelp)
+		s.updateSizes()
+		return nil
+	case key.Matches(msg, defaultKeyMap.Reverse):
+		return s.handleReverse()
+	case key.Matches(msg, defaultKeyMap.Toggle):
+		return s.handleKeyToggle()
+	case key.Matches(msg, defaultKeyMap.Clear):
+		return s.handleClear()
+	case key.Matches(msg, defaultKeyMap.Accept):
+		return s.handleKeyAccept()
+	case key.Matches(msg, defaultKeyMap.Esc):
+		return nav.Go(nav.Main)
+	}
+
+	var cmd tea.Cmd
+	s.list, cmd = s.list.Update(msg)
+	return cmd
 }
 
 func (s *Model) handleKeyToggle() tea.Cmd {
