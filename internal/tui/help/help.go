@@ -8,16 +8,6 @@ import (
 	"github.com/pcekm/graphping/internal/tui/theme"
 )
 
-var (
-	shortBoxStyleBase = lipgloss.NewStyle().
-				Padding(0, 1).
-				AlignHorizontal(lipgloss.Right)
-	fullBoxStyleBase = lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder(), true, false, false, false).
-				BorderForeground(lipgloss.Color("#555555")).
-				Padding(0, 1)
-)
-
 type Model struct {
 	keyMap  help.KeyMap
 	keyHelp help.Model
@@ -31,12 +21,22 @@ func New(theme *theme.Theme, km help.KeyMap) *Model {
 		keyHelp: help.New(),
 		theme:   theme,
 	}
-	m.keyHelp.Styles.FullKey = theme.Text.Important.Inherit(m.keyHelp.Styles.FullKey).
-		Foreground(theme.Colors.Secondary)
-	m.keyHelp.Styles.FullDesc = theme.Text.Normal.Inherit(m.keyHelp.Styles.FullDesc)
-	m.keyHelp.Styles.ShortKey = theme.Text.Normal.Inherit(m.keyHelp.Styles.ShortKey).
-		Foreground(theme.Colors.Secondary)
-	m.keyHelp.Styles.ShortDesc = theme.Text.Unimportant.Inherit(m.keyHelp.Styles.ShortDesc)
+	m.keyHelp.Styles.Ellipsis = theme.Text.Unimportant.
+		Inherit(m.keyHelp.Styles.Ellipsis)
+
+	m.keyHelp.Styles.FullKey = theme.Text.Important.
+		Inherit(m.keyHelp.Styles.FullKey)
+	m.keyHelp.Styles.FullDesc = theme.Text.Normal.
+		Inherit(m.keyHelp.Styles.FullDesc)
+	m.keyHelp.Styles.FullSeparator = theme.Text.Unimportant.
+		Inherit(m.keyHelp.Styles.FullSeparator)
+
+	m.keyHelp.Styles.ShortKey = theme.Text.Normal.
+		Inherit(m.keyHelp.Styles.ShortKey)
+	m.keyHelp.Styles.ShortDesc = theme.Text.Unimportant.
+		Inherit(m.keyHelp.Styles.ShortDesc)
+	m.keyHelp.Styles.ShortSeparator = theme.Text.Unimportant.
+		Inherit(m.keyHelp.Styles.ShortSeparator)
 	return m
 }
 
@@ -63,9 +63,14 @@ func (m *Model) SetWidth(width int) {
 
 func (m *Model) style() lipgloss.Style {
 	if m.keyHelp.ShowAll {
-		return fullBoxStyleBase.Inherit(m.theme.Text.Normal)
+		return m.theme.Base.
+			Border(lipgloss.NormalBorder(), true, false, false, false).
+			BorderForeground(m.theme.Colors.OnSurfaceVariant).
+			Padding(0, 1)
 	}
-	return shortBoxStyleBase.Inherit(m.theme.Text.Normal)
+	return m.theme.Base.
+		Padding(0, 1).
+		AlignHorizontal(lipgloss.Right)
 }
 
 // Init is run in the parent's Init(). (Currently a no-op.)

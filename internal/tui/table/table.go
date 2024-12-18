@@ -118,11 +118,6 @@ var (
 		{ID: ColPctLoss, Title: " Loss", FixedWidth: 5},
 	}
 
-	headerStyleBase = lipgloss.NewStyle().
-			Padding(0, horizontalPadding)
-	cellStyleBase = lipgloss.NewStyle().
-			Padding(0, horizontalPadding)
-
 	bars     = []string{"▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"}
 	statuses = map[pinger.ResultType]string{
 		pinger.Waiting:     " ",
@@ -434,13 +429,15 @@ func (t *Model) headerView() string {
 }
 
 func (t *Model) headerStyle() lipgloss.Style {
-	return headerStyleBase.Inherit(t.theme.Text.Important).
+	return t.theme.Text.Important.
 		Foreground(t.theme.Colors.OnPrimary).
-		Background(t.theme.Colors.Primary)
+		Background(t.theme.Colors.Primary).
+		Padding(0, horizontalPadding)
 }
 
 func (t *Model) cellStyle() lipgloss.Style {
-	return cellStyleBase.Inherit(t.theme.Text.Normal)
+	return t.theme.Text.Normal.
+		Padding(0, horizontalPadding)
 }
 
 func (t *Model) errStyle() lipgloss.Style {

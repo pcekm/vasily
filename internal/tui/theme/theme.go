@@ -7,34 +7,58 @@ import (
 	colorful "github.com/lucasb-eyer/go-colorful"
 )
 
+var (
+	defaultColors = Colors{
+		// There's a bug in lipgloss that doesn't render the background
+		// everywhere. Particularly in help. So for now, we have to use the
+		// standard terminal background.
+		//
+		//	https://github.com/charmbracelet/bubbles/issues/572
+		//
+		// Surface: lipgloss.AdaptiveColor{ Dark: "#161711" },
+		Surface: lipgloss.NoColor{},
+		OnSurface: lipgloss.CompleteColor{
+			TrueColor: "#BBBBBB",
+		},
+		OnSurfaceVariant: lipgloss.CompleteColor{
+			TrueColor: "#888888",
+		},
+		Primary: lipgloss.CompleteColor{
+			TrueColor: "#1F326f",
+			ANSI256:   "26",
+			ANSI:      "4",
+		},
+		OnPrimary: lipgloss.Color("#CCCCCC"),
+		Secondary: lipgloss.CompleteColor{
+			TrueColor: "#788AC4",
+			ANSI256:   "245",
+			ANSI:      "7",
+		},
+		OnSecondary: lipgloss.Color("#000000"),
+		Error:       lipgloss.Color("#550C18"),
+		OnError:     lipgloss.Color("#CCCCCC"),
+	}
+
+	base = lipgloss.NewStyle().
+		Foreground(lipgloss.AdaptiveColor{
+			Light: "#333333",
+			Dark:  "#AAAAAA",
+		}).
+		Foreground(defaultColors.OnSurface).
+		Background(defaultColors.Surface)
+)
+
 // Default contains the default theme.
 var Default = Theme{
+	Base: base,
 	Text: Text{
-		Normal: lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{
-				Light: "#333333",
-				Dark:  "#AAAAAA",
-			}),
-		Important: lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{
-				Dark:  "#DDDDDD",
-				Light: "#000000",
-			}).
+		Normal: base,
+		Important: base.
 			Bold(true),
-		Unimportant: lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{
-				Light: "#666666",
-				Dark:  "#999999",
-			}),
+		Unimportant: base.
+			Foreground(defaultColors.OnSurfaceVariant),
 	},
-	Colors: Colors{
-		Primary:     lipgloss.Color("#1F326F"),
-		OnPrimary:   lipgloss.Color("#CCCCCC"),
-		Secondary:   lipgloss.Color("#788AC4"),
-		OnSecondary: lipgloss.Color("#000000"),
-		Error:       lipgloss.Color("#881522"),
-		OnError:     lipgloss.Color("#CCCCCC"),
-	},
+	Colors: defaultColors,
 	Heatmap: Gradient{
 		Low:  "#3abb46",
 		High: "#ab3c45",
@@ -43,6 +67,7 @@ var Default = Theme{
 
 // Theme contains common styles for use throughout the program.
 type Theme struct {
+	Base    lipgloss.Style // Base style that everything else inherits from
 	Text    Text
 	Colors  Colors
 	Heatmap Heatmap
@@ -57,12 +82,15 @@ type Text struct {
 
 // Colors contains some common colors that recur through the theme.
 type Colors struct {
-	Primary     lipgloss.TerminalColor
-	OnPrimary   lipgloss.TerminalColor
-	Secondary   lipgloss.TerminalColor
-	OnSecondary lipgloss.TerminalColor
-	Error       lipgloss.TerminalColor
-	OnError     lipgloss.TerminalColor
+	Surface          lipgloss.TerminalColor
+	OnSurface        lipgloss.TerminalColor
+	OnSurfaceVariant lipgloss.TerminalColor
+	Primary          lipgloss.TerminalColor
+	OnPrimary        lipgloss.TerminalColor
+	Secondary        lipgloss.TerminalColor
+	OnSecondary      lipgloss.TerminalColor
+	Error            lipgloss.TerminalColor
+	OnError          lipgloss.TerminalColor
 }
 
 // Heatmap maps a fraction in the interval [0, 1] to a color.

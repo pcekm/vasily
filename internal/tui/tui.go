@@ -245,13 +245,14 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 
 // View renders the model.
 func (m *Model) View() string {
+	var view string
 	switch m.focus {
 	case nav.Main:
-		return m.table.View()
+		view = m.table.View()
 	case nav.SortSelect:
-		return m.sort.View()
+		view = m.sort.View()
 	default:
 		log.Panicf("Unhandled focus: %v", m.focus)
 	}
-	return ""
+	return m.opts.Theme.Base.Render(view)
 }
