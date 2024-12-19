@@ -67,13 +67,10 @@ func (h *serverHarness) Run() {
 
 // Closes the output pipe, and waits for the server to exit.
 func (h *serverHarness) DoneWriting() {
-	if h.out == nil {
-		return
-	}
+	h.t.Helper()
 	if err := h.out.Close(); err != nil {
 		h.t.Errorf("Error closing out pipe: %v", err)
 	}
-	h.out = nil
 	select {
 	case <-h.srvDone:
 	case <-time.After(5 * time.Second):
@@ -82,7 +79,6 @@ func (h *serverHarness) DoneWriting() {
 }
 
 func (h *serverHarness) Close() {
-	h.DoneWriting()
 	if err := h.srv.Close(); err != nil {
 		h.t.Errorf("Error closing server: %v", err)
 	}
