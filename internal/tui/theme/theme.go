@@ -19,30 +19,66 @@ var (
 		//
 		// Surface: lipgloss.AdaptiveColor{ Dark: "#161711" },
 		Surface: lipgloss.NoColor{},
-		OnSurface: lipgloss.CompleteColor{
-			TrueColor: "#BBBBBB",
+		OnSurface: lipgloss.AdaptiveColor{
+			Light: "#222222",
+			Dark:  "#BBBBBB",
 		},
-		OnSurfaceVariant: lipgloss.CompleteColor{
-			TrueColor: "#888888",
+		OnSurfaceVariant: lipgloss.AdaptiveColor{
+			Light: "#444444",
+			Dark:  "#888888",
 		},
-		Primary: lipgloss.CompleteColor{
-			TrueColor: "#1c3965",
-			ANSI256:   "18",
-			ANSI:      "4",
+		Primary: lipgloss.CompleteAdaptiveColor{
+			Light: lipgloss.CompleteColor{
+				TrueColor: "#68a3ff",
+				ANSI256:   "33",
+				ANSI:      "12",
+			},
+			Dark: lipgloss.CompleteColor{
+				TrueColor: "#1c3965",
+				ANSI256:   "18",
+				ANSI:      "4",
+			},
 		},
-		OnPrimary: lipgloss.Color("#CCCCCC"),
-		Secondary: lipgloss.CompleteColor{
-			TrueColor: "#323a47",
-			ANSI256:   "237",
-			ANSI:      "8",
+		OnPrimary: lipgloss.AdaptiveColor{
+			Light: "#111111",
+			Dark:  "#CCCCCC",
 		},
-		OnSecondary: lipgloss.Color("#CCCCCC"),
-		Error: lipgloss.CompleteColor{
-			TrueColor: "#550C18",
-			ANSI256:   "52",
-			ANSI:      "1",
+		Secondary: lipgloss.CompleteAdaptiveColor{
+			Light: lipgloss.CompleteColor{
+				TrueColor: "#9cc3ff",
+				ANSI256:   "251",
+				ANSI:      "7",
+			},
+			Dark: lipgloss.CompleteColor{
+				TrueColor: "#323a47",
+				ANSI256:   "237",
+				ANSI:      "8",
+			},
 		},
-		OnError: lipgloss.Color("#CCCCCC"),
+		OnSecondary: lipgloss.AdaptiveColor{
+			Light: "#111111",
+			Dark:  "#CCCCCC",
+		},
+		Error: lipgloss.CompleteAdaptiveColor{
+			// Light: Default background
+			Dark: lipgloss.CompleteColor{
+				TrueColor: "#a8242a",
+				ANSI256:   "124",
+				ANSI:      "1",
+			},
+		},
+		OnError: lipgloss.CompleteAdaptiveColor{
+			Light: lipgloss.CompleteColor{
+				TrueColor: "#d22f37",
+				ANSI256:   "124",
+				ANSI:      "1",
+			},
+			Dark: lipgloss.CompleteColor{
+				TrueColor: "#CCCCCC",
+				ANSI256:   "252",
+				ANSI:      "7",
+			},
+		},
 	}
 
 	ansiGradient    = []string{"2", "3", "1"}
@@ -69,8 +105,10 @@ var Default = Theme{
 	},
 	Colors: defaultColors,
 	Heatmap: Gradient{
-		Low:  "#3abb46",
-		High: "#ab3c45",
+		LightLow:  "#5ad02d",
+		LightHigh: "#d22f37",
+		DarkLow:   "#3fa423",
+		DarkHigh:  "#a8242a",
 	},
 }
 
@@ -119,17 +157,26 @@ func hexColor(s string) colorful.Color {
 
 // Gradient contains a color gradient representing a fraction from 0 to 1.
 type Gradient struct {
-	Low  string
-	High string
+	DarkLow   string
+	DarkHigh  string
+	LightLow  string
+	LightHigh string
 }
 
-// For returns the color for the given value. The value must be in the interval
+// At returns the color for the given value. The value must be in the interval
 // [0, 1].
-func (h Gradient) At(v float64) lipgloss.TerminalColor {
+func (g Gradient) At(v float64) lipgloss.TerminalColor {
+	return lipgloss.CompleteAdaptiveColor{
+		Light: color(g.LightLow, g.LightHigh, v),
+		Dark:  color(g.DarkLow, g.DarkHigh, v),
+	}
+}
+
+func color(low, high string, v float64) lipgloss.CompleteColor {
 	ansiColor := ansiGradient[int(math.Round(v*float64(len(ansiGradient)-1)))]
 	ansi256Color := ansi256Gradient[int(math.Round(v*float64(len(ansi256Gradient)-1)))]
-	cold := hexColor(h.Low)
-	hot := hexColor(h.High)
+	cold := hexColor(low)
+	hot := hexColor(high)
 	c := cold.BlendHcl(hot, v)
 	return lipgloss.CompleteColor{
 		TrueColor: c.Hex(),
