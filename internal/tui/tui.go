@@ -151,22 +151,20 @@ func (m *Model) handleError(err error) tea.Cmd {
 
 // Returns a command that starts running a new ping.
 func (m *Model) startPingerCmd(key table.RowKey, target net.Addr) tea.Cmd {
-	return func() tea.Msg {
-		ping, err := pinger.New(m.opts.PingBackend, util.AddrVersion(target), target, &pinger.Options{
-			Interval: m.opts.PingInterval,
-		})
-		if err != nil {
-			return err
-		}
-		go ping.Run()
-		m.table.AddRow(
-			table.Row{
-				RowKey:      key,
-				DisplayHost: lookup.Addr(target),
-				Pinger:      ping,
-			})
-		return nil
+	ping, err := pinger.New(m.opts.PingBackend, util.AddrVersion(target), target, &pinger.Options{
+		Interval: m.opts.PingInterval,
+	})
+	if err != nil {
+		return func() tea.Msg { return err }
 	}
+	go ping.Run()
+	m.table.AddRow(
+		table.Row{
+			RowKey:      key,
+			DisplayHost: lookup.Addr(target),
+			Pinger:      ping,
+		})
+	return nil
 }
 
 func (m *Model) startTraceCmd(addr net.Addr) tea.Cmd {
