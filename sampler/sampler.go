@@ -18,18 +18,16 @@ func main() {
 		log.Fatal("Error: not a terminal.")
 	}
 
-	co := theme.Default.Colors
-
 	profiles := []termenv.Profile{termenv.TrueColor, termenv.ANSI256, termenv.ANSI}
 	for _, p := range profiles {
-		printSamples(p, co)
+		printSamples(p, theme.Default)
 	}
-
 }
 
-func printSamples(prof termenv.Profile, co theme.Colors) {
+func printSamples(prof termenv.Profile, th theme.Theme) {
 	lipgloss.SetColorProfile(prof)
 
+	co := theme.Default.Colors
 	samples := []struct {
 		text   string
 		fg, bg lipgloss.TerminalColor
@@ -64,18 +62,23 @@ func printSamples(prof termenv.Profile, co theme.Colors) {
 		samp := sample(s.text, s.fg, s.bg)
 		size := lipgloss.Width(samp)
 		if curWidth+size > width {
-			fmt.Println()
-			curWidth = 0
 			fmt.Println(lipgloss.JoinHorizontal(lipgloss.Left, soFar...))
+			curWidth = 0
 			soFar = soFar[:0]
 		}
 		curWidth += size
 		soFar = append(soFar, samp)
 	}
 
-	if len(soFar) > 0 {
+	grad := gradient(th.Heatmap)
+	size := lipgloss.Width(grad)
+	if size+curWidth > width {
 		fmt.Println(lipgloss.JoinHorizontal(lipgloss.Left, soFar...))
+		curWidth = size
+		soFar = soFar[:0]
 	}
+	soFar = append(soFar, grad)
+	fmt.Println(lipgloss.JoinHorizontal(lipgloss.Left, soFar...))
 }
 
 // Returns a color sample with the given text and colors.
@@ -85,4 +88,18 @@ func sample(text string, fg, bg lipgloss.TerminalColor) string {
 		Background(bg).
 		Padding(1)
 	return style.Render(text)
+}
+
+// Returns a gradient sample.
+func gradient(gr theme.Heatmap) string {
+	const n = 7
+	style := lipgloss.NewStyle().
+		Width(2).
+		Height(3)
+
+	row := make([]string, n)
+	for i := range n {
+		row[i] = style.Background(gr.At(float64(i) / (n - 1))).Render("")
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Left, row...)
 }

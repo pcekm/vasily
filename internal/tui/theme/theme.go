@@ -3,6 +3,8 @@
 package theme
 
 import (
+	"math"
+
 	"github.com/charmbracelet/lipgloss"
 	colorful "github.com/lucasb-eyer/go-colorful"
 )
@@ -24,20 +26,27 @@ var (
 			TrueColor: "#888888",
 		},
 		Primary: lipgloss.CompleteColor{
-			TrueColor: "#1F326f",
-			ANSI256:   "26",
+			TrueColor: "#1c3965",
+			ANSI256:   "18",
 			ANSI:      "4",
 		},
 		OnPrimary: lipgloss.Color("#CCCCCC"),
 		Secondary: lipgloss.CompleteColor{
-			TrueColor: "#788AC4",
-			ANSI256:   "245",
-			ANSI:      "7",
+			TrueColor: "#323a47",
+			ANSI256:   "237",
+			ANSI:      "8",
 		},
-		OnSecondary: lipgloss.Color("#000000"),
-		Error:       lipgloss.Color("#550C18"),
-		OnError:     lipgloss.Color("#CCCCCC"),
+		OnSecondary: lipgloss.Color("#CCCCCC"),
+		Error: lipgloss.CompleteColor{
+			TrueColor: "#550C18",
+			ANSI256:   "52",
+			ANSI:      "1",
+		},
+		OnError: lipgloss.Color("#CCCCCC"),
 	}
+
+	ansiGradient    = []string{"2", "3", "1"}
+	ansi256Gradient = []string{"119", "112", "148", "142", "136", "130", "124"}
 
 	base = lipgloss.NewStyle().
 		Foreground(lipgloss.AdaptiveColor{
@@ -117,8 +126,14 @@ type Gradient struct {
 // For returns the color for the given value. The value must be in the interval
 // [0, 1].
 func (h Gradient) At(v float64) lipgloss.TerminalColor {
+	ansiColor := ansiGradient[int(math.Round(v*float64(len(ansiGradient)-1)))]
+	ansi256Color := ansi256Gradient[int(math.Round(v*float64(len(ansi256Gradient)-1)))]
 	cold := hexColor(h.Low)
 	hot := hexColor(h.High)
 	c := cold.BlendHcl(hot, v)
-	return lipgloss.Color(c.Hex())
+	return lipgloss.CompleteColor{
+		TrueColor: c.Hex(),
+		ANSI256:   ansi256Color,
+		ANSI:      ansiColor,
+	}
 }
