@@ -219,13 +219,25 @@ func (t *Model) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 
 	var cmd tea.Cmd
 	switch {
-	case key.Matches(msg, defaultKeyMap.Quit):
-		cmd = tea.Quit
 	case key.Matches(msg, defaultKeyMap.Sort):
 		cmd = nav.Go(nav.SortSelect)
 	case key.Matches(msg, defaultKeyMap.Help):
 		t.help.SetFullHelp(!origHelp)
 		t.updateSizes()
+	case key.Matches(msg, defaultKeyMap.Up):
+		t.vp.LineUp(1)
+	case key.Matches(msg, defaultKeyMap.Down):
+		t.vp.LineDown(1)
+	case key.Matches(msg, defaultKeyMap.PgUp):
+		t.vp.LineUp(t.vp.VisibleLineCount())
+	case key.Matches(msg, defaultKeyMap.PgDn):
+		t.vp.LineDown(t.vp.VisibleLineCount())
+	case key.Matches(msg, defaultKeyMap.Home):
+		t.vp.GotoTop()
+	case key.Matches(msg, defaultKeyMap.End):
+		t.vp.GotoBottom()
+	case key.Matches(msg, defaultKeyMap.Quit):
+		cmd = tea.Quit
 	}
 
 	return cmd
