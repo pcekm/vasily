@@ -53,7 +53,7 @@ func main() {
 	}
 
 	// This is just for user-friendliness. The important check is the rate
-	// limiter in backend/icmp, since that gets applied in the privsep server.
+	// limiter in the backend, since that gets applied in the privsep server.
 	if *pingInterval < maxPingInterval {
 		fmt.Fprintf(os.Stderr, "Ping interval may not be less than %v.\n", maxPingInterval)
 		os.Exit(1)

@@ -21,6 +21,10 @@ import (
 	"github.com/pcekm/graphping/internal/util"
 )
 
+const (
+	screenUpdateInterval = 100 * time.Millisecond
+)
+
 // Options contain main program options.
 type Options struct {
 	// Theme contains a UI theme.
@@ -212,7 +216,7 @@ func (m *Model) updateTraceStep(msg traceStepMsg) tea.Cmd {
 
 func (m *Model) updateRows(updateRows) tea.Cmd {
 	m.table.UpdateRows()
-	return tea.Tick(m.opts.PingInterval, func(time.Time) tea.Msg {
+	return tea.Tick(screenUpdateInterval, func(time.Time) tea.Msg {
 		return updateRows{}
 	})
 }
