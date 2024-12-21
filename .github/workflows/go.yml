@@ -16,6 +16,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Enable Unprivileged Ping
+      run: |
+        sudo sysctl -w "$(printf 'net.ipv4.ping_group_range=0\t10000')"
+
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
