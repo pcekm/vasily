@@ -1,6 +1,6 @@
 module github.com/pcekm/graphping
 
-go 1.23.2
+go 1.23
 
 require (
 	code.cloudfoundry.org/clock v1.23.0

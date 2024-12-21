@@ -1,5 +1,7 @@
 # Graphping
 
+[![Go](https://github.com/pcekm/graphping/actions/workflows/go.yml/badge.svg)](https://github.com/pcekm/graphping/actions/workflows/go.yml)
+
 Graphping is a network troubleshooting utility that's a combination of ping,
 traceroute, and top. It repeatedly pings multiple hosts and displays the results
 in an easy-to-read format.
@@ -20,7 +22,7 @@ have standard support for raw sockets. Windows is currently unsupported.
 
 ## Building
 
-You will need a recent version of [Go](https://go.dev/doc/install):
+You will need [Go](https://go.dev/doc/install) version 1.23 or higher:
 
 ```shell
 git clone https://github.com/pcekm/graphping
