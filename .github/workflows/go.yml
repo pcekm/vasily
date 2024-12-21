@@ -28,9 +28,20 @@ jobs:
         # address in it. This expands it to have more addresses, which ensures
         # there are some nonfunctional IPv6 addresses (e.g. ::2) in the routing table.
       - name: Expand loopback network
-        if: ${{ runner.os == 'Linux' }}
         run: |
-          sudo ifconfig lo inet6 del ::1 add ::1/126
+          case "$RUNNER_OS" in
+            Linux)
+              sudo ifconfig lo inet6 del ::1 add ::1/126
+              ;;
+            macOS)
+              sudo ifconfig lo0 inet6 delete ::1
+              sudo ifconfig lo0 inet6 add ::1 prefixlen 126
+              ;;
+            *)
+              echo "Unsupported OS: $RUNNER_OS" >&2
+              exit 1
+              ;;
+          esac
 
       - name: Set up Go
         uses: actions/setup-go@v4
