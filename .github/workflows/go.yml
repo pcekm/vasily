@@ -12,11 +12,12 @@ on:
 jobs:
 
   build:
-    runs-on: ubuntu-latest
+    runs-on: [ubuntu-latest, macos-latest]
     steps:
     - uses: actions/checkout@v4
 
     - name: Enable Unprivileged Ping
+      if: ${{ runner.os == "Linux" }}
       run: |
         sudo sysctl -w "$(printf 'net.ipv4.ping_group_range=0\t10000')"
 
@@ -24,6 +25,7 @@ jobs:
       # address in it. This expands it to have more addresses, which ensures
       # there are some nonfunctional IPv6 addresses (e.g. ::2) in the routing table.
     - name: Expand loopback network
+      if: ${{ runner.os == "Linux" }}
       run: |
         sudo ifconfig lo inet6 del ::1 add ::1/126
 
