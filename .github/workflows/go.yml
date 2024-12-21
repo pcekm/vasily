@@ -17,7 +17,7 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Enable Unprivileged Ping
-      if: ${{ runner.os == "Linux" }}
+      if: ${{ runner.os == 'Linux' }}
       run: |
         sudo sysctl -w "$(printf 'net.ipv4.ping_group_range=0\t10000')"
 
