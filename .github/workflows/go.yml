@@ -20,6 +20,13 @@ jobs:
       run: |
         sudo sysctl -w "$(printf 'net.ipv4.ping_group_range=0\t10000')"
 
+      # While IPv4 loopback has a netmask of /24, the IPv6 loopback has a single
+      # address in it. This expands it to have more addresses, which ensures
+      # there are some nonfunctional IPv6 addresses (e.g. ::2) in the routing table.
+    - name: Expand loopback network
+      run: |
+        sudo ifconfig lo inet6 del ::1 add ::1/126
+
     - name: Set up Go
       uses: actions/setup-go@v4
       with:

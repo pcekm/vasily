@@ -24,7 +24,17 @@ const payload = "Give me a ping, Vasily. One ping only, please."
 var (
 	// Reserved for documentation; shouldn't ever reply.
 	badAddrV4 = &net.UDPAddr{IP: net.ParseIP("192.0.2.1")}
-	badAddrV6 = &net.UDPAddr{IP: net.ParseIP("1001:db8::1")}
+	// IPv6 is problematic. The Github workflow runners don't seem to have
+	// anything other than the loopback interface. Which means that writes to
+	// anything other than ::1 will immediately fail with "no route to host."
+	// This can be fixed by expanding the loopback network a bit. For example,
+	// on Linux:
+	//
+	//   ifconfig lo inet6 del ::1 add inet6 ::1/126
+	//
+	// Now a write to ::2 won't immediately fail. (It still won't respond, but
+	// that's what the test needs.)
+	badAddrV6 = &net.UDPAddr{IP: net.ParseIP("::2")}
 
 	supportedOS = map[string]bool{
 		"darwin": true,
