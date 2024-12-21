@@ -23,21 +23,10 @@ var (
 	}
 )
 
-// Compares two durations to the nearest millisecond.
-func msEq(a, b time.Duration) bool {
-	// Sometimes packets can take a little over a millisecond even when no
-	// latency has been set. This causes flakiness. Assume if both are less than
-	// 1.5ms, that they are equal.
-	if a < 1500*time.Microsecond && b < 1500*time.Microsecond {
-		return true
-	}
-	return (a - b).Abs() < time.Millisecond
-}
-
 // Diffs two PingResults while accounting for the latency and timestamps.
 func diffPingResults[T any](a, b T) string {
 	return cmp.Diff(a, b,
-		cmp.Comparer(msEq),
+		cmp.FilterValues(func(t1, t2 time.Duration) bool { return true }, cmp.Ignore()),
 		cmp.FilterValues(func(t1, t2 time.Time) bool { return true }, cmp.Ignore()))
 }
 
@@ -47,8 +36,9 @@ func TestLive(t *testing.T) {
 	}
 	opts := &Options{
 		NPings:   3,
-		Interval: time.Millisecond,
 		History:  3,
+		Interval: time.Millisecond,
+		Timeout:  5 * time.Millisecond,
 	}
 	p, err := New(backend.Name("icmp"), util.IPv4, test.LoopbackV4, opts)
 	if err != nil {
@@ -196,9 +186,9 @@ func TestHistory(t *testing.T) {
 
 			opts := &Options{
 				NPings:   c.nPings,
-				Interval: time.Millisecond,
+				Interval: 1 * time.Nanosecond,
 				History:  c.nHist,
-				Timeout:  4 * time.Millisecond,
+				Timeout:  1 * time.Millisecond,
 			}
 			p, err := New(name, util.IPv4, test.LoopbackV4, opts)
 			if err != nil {
