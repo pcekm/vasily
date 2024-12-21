@@ -25,7 +25,7 @@ jobs:
       # address in it. This expands it to have more addresses, which ensures
       # there are some nonfunctional IPv6 addresses (e.g. ::2) in the routing table.
     - name: Expand loopback network
-      if: ${{ runner.os == "Linux" }}
+      if: ${{ runner.os == 'Linux' }}
       run: |
         sudo ifconfig lo inet6 del ::1 add ::1/126
 
