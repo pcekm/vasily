@@ -10,7 +10,7 @@ in an easy-to-read format.
 
 ## Requirements
 
-Graphping has been tested on recent versions of:
+Graphping has been tested with Go 1.23 on recent versions of:
 
 - macOS (both unprivileged ICMP and raw sockets)
 - Linux (both unprivileged ICMP and raw sockets)
@@ -60,9 +60,8 @@ chmod u+s /usr/local/bin/graphping
 
 Depending on your distribution, you may need to adjust a setting on your Linux
 machine to enable unprivileged pings. If it panics with
-`listen error: permission denied`, you'll need to change the
-`net.ipv4.ping_group_range` setting. Something like this, followed by a reboot
-should do it:
+`listen error: permission denied`, change the `net.ipv4.ping_group_range`.
+Something like this, followed by a reboot should do it:
 
 ```shell
 # As root:
