@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
+	"runtime/debug"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -34,6 +36,7 @@ var (
 	pingBackend  = backend.FlagP("protocol", "P", "icmp", "Protocol to use for pings.")
 	traceBackend = backend.FlagP("trace_protocol", "T", "udp", "Protocol to use for traceroutes.")
 	maxTTL       = pflag.Int("max_ttl", 64, "Maximum path length to trace.")
+	printVersion = pflag.BoolP("version", "v", false, "Output the version number.")
 )
 
 // FlagVars.
@@ -46,6 +49,11 @@ func main() {
 	defer privsepCleanup()
 
 	pflag.Parse()
+
+	if *printVersion {
+		printVersionInfo()
+		os.Exit(0)
+	}
 
 	if len(pflag.Args()) == 0 {
 		pflag.Usage()
@@ -83,4 +91,13 @@ func main() {
 
 	prog := tea.NewProgram(tbl, tea.WithAltScreen())
 	prog.Run()
+}
+
+func printVersionInfo() {
+	inf, ok := debug.ReadBuildInfo()
+	if !ok {
+		fmt.Println("graphping: unknown version")
+		return
+	}
+	fmt.Printf("%s %v built on %v\n", path.Base(inf.Path), inf.Main.Version, inf.GoVersion)
 }
