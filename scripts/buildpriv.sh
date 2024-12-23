@@ -1,6 +1,6 @@
-#/bin/bash
+#!/bin/bash
 
-# Builds a setuid root version.
+# Builds a setuid root version for testing purposes.
 
 set -o errexit
 

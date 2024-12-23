@@ -24,6 +24,8 @@ import (
 
 const maxPingInterval = time.Second
 
+var Version = "(unknown)" // Set via -ldflags
+
 // Flags.
 var (
 	pingPath     = pflag.Bool("path", false, "Ping complete path.")
@@ -99,5 +101,5 @@ func printVersionInfo() {
 		fmt.Println("graphping: unknown version")
 		return
 	}
-	fmt.Printf("%s %v built on %v\n", path.Base(inf.Path), inf.Main.Version, inf.GoVersion)
+	fmt.Printf("%s %s\nbuilt with %s\n", path.Base(inf.Path), Version, inf.GoVersion)
 }
