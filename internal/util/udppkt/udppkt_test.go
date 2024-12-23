@@ -1,4 +1,4 @@
-package util
+package udppkt
 
 import (
 	"testing"

@@ -9,6 +9,7 @@ import (
 
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/util"
+	"github.com/pcekm/graphping/internal/util/udppkt"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
@@ -118,13 +119,13 @@ func ipBodyToPacket(ipVer util.IPVersion, buf []byte) (*backend.Packet, int, err
 // Decodes a UDP packet into a backend.Packet. The caller must set the Type
 // field.
 func decodeUDP(buf []byte) (*backend.Packet, int, error) {
-	udph, err := util.ParseUDPHeader(buf)
+	udph, err := udppkt.ParseUDPHeader(buf)
 	if err != nil {
 		return nil, -1, fmt.Errorf("parse UDP header: %v", err)
 	}
 	var payload []byte
-	if len(buf) > util.UDPHeaderLen {
-		payload = buf[util.UDPHeaderLen:]
+	if len(buf) > udppkt.UDPHeaderLen {
+		payload = buf[udppkt.UDPHeaderLen:]
 	}
 	return &backend.Packet{Seq: int(udph.DstPort), Payload: payload}, int(udph.SrcPort), nil
 }

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/icmppkt"
+	"github.com/pcekm/graphping/internal/util/icmppkt"
 )
 
 // ReadFrom Reads an ICMP message.

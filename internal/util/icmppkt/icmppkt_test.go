@@ -9,6 +9,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/util"
+	"github.com/pcekm/graphping/internal/util/udppkt"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
@@ -77,12 +78,12 @@ func echoReply(t *testing.T, ipVer util.IPVersion, id, seq int, payload []byte) 
 func udpPing(t *testing.T, ipVer util.IPVersion, id, seq int, payload []byte) []byte {
 	t.Helper()
 
-	udpPkt := util.UDPHeader{
+	pkt := udppkt.UDPHeader{
 		SrcPort:  uint16(id),
 		DstPort:  uint16(seq),
-		TotalLen: uint16(util.UDPHeaderLen + len(payload)),
+		TotalLen: uint16(udppkt.UDPHeaderLen + len(payload)),
 	}
-	udpBuf := udpPkt.Marshal(nil)
+	udpBuf := pkt.Marshal(nil)
 	iphBuf := ipHeader(t, ipVer, syscall.IPPROTO_UDP, len(udpBuf)+len(payload))
 	res := append(iphBuf, udpBuf...)
 	res = append(res, payload...)

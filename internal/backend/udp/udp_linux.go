@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/icmppkt"
 	"github.com/pcekm/graphping/internal/util"
+	"github.com/pcekm/graphping/internal/util/icmppkt"
 	"golang.org/x/sys/unix"
 )
 
