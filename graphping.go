@@ -96,10 +96,11 @@ func main() {
 }
 
 func printVersionInfo() {
-	inf, ok := debug.ReadBuildInfo()
-	if !ok {
-		fmt.Println("graphping: unknown version")
-		return
+	name := "graphping"
+	goVer := "unknown go version"
+	if inf, ok := debug.ReadBuildInfo(); ok {
+		name = path.Base(inf.Path)
+		goVer = inf.GoVersion
 	}
-	fmt.Printf("%s %s\nbuilt with %s\n", path.Base(inf.Path), Version, inf.GoVersion)
+	fmt.Printf("%s %s\nbuilt with %s\n", name, Version, goVer)
 }
