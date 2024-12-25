@@ -16,7 +16,6 @@ import (
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
-	"golang.org/x/time/rate"
 )
 
 const payload = "Give me a ping, Vasily. One ping only, please."
@@ -94,12 +93,11 @@ func TestPingConnection(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 			defer cancel()
-			conn, err := New(c.ipVer)
+			conn, err := NewUnlimited(c.ipVer, 0, c.ipVer.ICMPProtoNum())
 			if err != nil {
 				t.Fatalf("Error opening connection: %v", err)
 			}
 			defer conn.Close()
-			conn.limiter.SetLimit(rate.Inf)
 
 			reqType := util.Choose[icmp.Type](c.ipVer, ipv4.ICMPTypeEcho, ipv6.ICMPTypeEchoRequest)
 
@@ -145,7 +143,7 @@ func TestConnectionCountLimit(t *testing.T) {
 
 	// First, create and close a connection, to ensure it doesn't continue to be
 	// counted against the total.
-	conn, err := New(util.IPv6)
+	conn, err := New(util.IPv6, 0, util.IPv6.ICMPProtoNum())
 	if err != nil {
 		t.Fatalf("Error creating conn: %v", err)
 	}
@@ -155,7 +153,7 @@ func TestConnectionCountLimit(t *testing.T) {
 
 	// Open as many connections as allowed.
 	for i := range maxActiveConns {
-		conn, err := New(util.IPv4)
+		conn, err := New(util.IPv4, 0, util.IPv4.ICMPProtoNum())
 		if err != nil {
 			t.Fatalf("Error creating conn %d: %v", i, err)
 		}
@@ -163,7 +161,7 @@ func TestConnectionCountLimit(t *testing.T) {
 	}
 
 	// Try and hopefully fail to create one more.
-	if conn, err := New(util.IPv4); err == nil {
+	if conn, err := New(util.IPv4, 0, util.IPv4.ICMPProtoNum()); err == nil {
 		t.Errorf("No error creating connection %d", maxActiveConns+1)
 		conn.Close()
 	}

@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"syscall"
 
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/backend/icmpbase"
@@ -31,20 +32,14 @@ type Conn struct {
 
 // New opens a new connection.
 func New(ipVer util.IPVersion) (*Conn, error) {
-	icmpConn, err := icmpbase.New(ipVer)
-	if err != nil {
-		return nil, err
-	}
 	c := &Conn{
 		ipVer:    ipVer,
-		icmpConn: icmpConn,
 		basePort: defaultBasePort,
 	}
 
 	address := util.Choose(ipVer, "udp4", "udp6")
 	conn, err := net.ListenUDP(address, nil)
 	if err != nil {
-		icmpConn.Close()
 		return nil, err
 	}
 	switch ipVer {
@@ -56,7 +51,11 @@ func New(ipVer util.IPVersion) (*Conn, error) {
 		log.Panicf("Unknown IP version: %v", ipVer)
 	}
 
-	icmpConn.SetExpectedSrcPort(c.localPort())
+	c.icmpConn, err = icmpbase.New(ipVer, util.Port(conn.LocalAddr()), syscall.IPPROTO_UDP)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
 
 	return c, nil
 }
@@ -135,9 +134,9 @@ func (c *Conn) setTTL(ttl int) error {
 func (c *Conn) localPort() int {
 	switch c.ipVer {
 	case util.IPv4:
-		return c.connV4.LocalAddr().(*net.UDPAddr).Port
+		return util.Port(c.connV4.LocalAddr())
 	case util.IPv6:
-		return c.connV6.LocalAddr().(*net.UDPAddr).Port
+		return util.Port(c.connV6.LocalAddr())
 	default:
 		return -1
 	}

@@ -113,7 +113,8 @@ func AddrVersion(addr net.Addr) IPVersion {
 	return IPv4
 }
 
-// IP returns the IP from an address.
+// IP returns the IP from an address. Returns nil if the address type doesn't
+// have an IP or the address itself is nil.
 func IP(addr net.Addr) net.IP {
 	switch addr := addr.(type) {
 	case *net.UDPAddr:
@@ -123,7 +124,18 @@ func IP(addr net.Addr) net.IP {
 	case *net.TCPAddr:
 		return addr.IP
 	default:
-		log.Panicf("Wrong address type: %#v", addr)
 		return nil
 	}
+}
+
+// Port returns the port from an address. Returns zero if the address type
+// doesn't have a port.
+func Port(addr net.Addr) int {
+	switch addr := addr.(type) {
+	case *net.UDPAddr:
+		return addr.Port
+	case *net.TCPAddr:
+		return addr.Port
+	}
+	return 0
 }

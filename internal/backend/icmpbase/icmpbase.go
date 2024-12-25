@@ -2,13 +2,9 @@
 package icmpbase
 
 import (
+	"context"
 	"errors"
-	"fmt"
-	"log"
 	"net"
-	"os"
-	"sync"
-	"syscall"
 	"time"
 
 	"github.com/pcekm/graphping/internal/backend"
@@ -22,55 +18,50 @@ const (
 	maxActiveConns  = 100
 )
 
-// Sent to when a connection is created; received from when a connection is
-// closed. This limits the total number of connections since the initial send
-// will block (or fail) if the buffer is full.
-var activeConns = make(chan any, maxActiveConns)
+var activeConns = make(chan struct{}, 100)
 
-// Conn is a basic ICMP network connection. A connection may handle either
-// IPv4 or IPv6 but not both at the same time. Since this may run setuid root,
-// the total number of open connections is limited.
+// Conn is a basic ICMP network connection. A connection may handle either IPv4
+// or IPv6 but not both at the same time. Since this may run setuid root, the
+// total number of open connections is limited.
 type Conn struct {
-	ipVer   util.IPVersion
-	echoID  int
-	limiter *rate.Limiter
-
-	// Write operations are locked so that TTL can be set and reset atomically.
-	// Uses write locks for custom TTLs, and read locks for sends on the default
-	// TTL. This allows concurrent writes for the more common case, and only
-	// fully locks to set the TTL, write, and reset the TTL atomically.
-	ttlMu  sync.RWMutex
-	readMu sync.Mutex
-	conn   net.PacketConn
-	file   *os.File
+	svc      *icmpService
+	limiter  *rate.Limiter
+	echoId   int
+	proto    int
+	receiver chan readResult
 }
 
-// New creates a new ICMP ping connection. The network arg should be:
-func New(ipVer util.IPVersion) (*Conn, error) {
+// New creates a new ICMP connection. The proto and id args filter what packets
+// this will receive. Proto may be syscall.IPPROTO_ICMP, IPPROTO_ICMPV6 or
+// IPPROTO_UDP. In the latter case, the id field is the source port number of
+// the UDP packets that generate an ICMP error response (e.g. time exceeded).
+func New(ipVer util.IPVersion, id, proto int) (*Conn, error) {
 	select {
-	case activeConns <- nil:
+	case activeConns <- struct{}{}:
 	default:
 		return nil, errors.New("too many connections")
 	}
 
-	conn, file, err := newConn(ipVer)
+	svc, err := serviceFor(ipVer)
 	if err != nil {
-		return nil, fmt.Errorf("listen error: %v", err)
+		return nil, err
 	}
-	p := &Conn{
-		ipVer:   ipVer,
-		echoID:  pingID(conn),
-		limiter: rate.NewLimiter(rate.Every(minPingInterval), 5),
-		conn:    conn,
-		file:    file,
-	}
-	return p, nil
+	receiver := make(chan readResult)
+	id = svc.RegisterReader(id, proto, receiver)
+
+	return &Conn{
+		svc:      svc,
+		limiter:  rate.NewLimiter(rate.Every(minPingInterval), 5),
+		echoId:   id,
+		proto:    proto,
+		receiver: receiver,
+	}, nil
 }
 
 // NewUnlimited creates a new ICMP ping connection with no rate limiter. This is
 // for use in tests.
-func NewUnlimited(ipVer util.IPVersion) (*Conn, error) {
-	c, err := New(ipVer)
+func NewUnlimited(ipVer util.IPVersion, id, proto int) (*Conn, error) {
+	c, err := New(ipVer, id, proto)
 	if err != nil {
 		return nil, err
 	}
@@ -78,93 +69,38 @@ func NewUnlimited(ipVer util.IPVersion) (*Conn, error) {
 	return c, nil
 }
 
-// Close closes the connection.
-func (p *Conn) Close() error {
-	err := errors.Join(
-		p.conn.Close(),
-		p.file.Close(),
-	)
+// Close implements backend.Conn.
+func (c *Conn) Close() error {
+	c.svc.UnregisterReader(c.echoId, c.proto)
+	// Empty the receiver channel to avoid leaking any sender goroutines.
+	for range c.receiver {
+	}
 	<-activeConns
-	return err
+	return nil
 }
 
-// Fd returns the file descriptor for the underlying socket.
-func (p *Conn) Fd() int {
-	return int(p.file.Fd())
+// EchoID returns the ICMP echo id or UDP src port used by this connection.
+func (c *Conn) EchoID() int {
+	return c.echoId
 }
 
-// EchoID returns the ICMP ID that must be used with this connection.
-func (p *Conn) EchoID() int {
-	return p.echoID
+// ReadFrom implements backend.Conn.
+func (c *Conn) ReadFrom(ctx context.Context) (pkt *backend.Packet, peer net.Addr, err error) {
+	select {
+	case msg, ok := <-c.receiver:
+		if !ok {
+			return nil, nil, errors.New("closed network connection") // Similar to error returned by icmp.PacketConn
+		}
+		return msg.Pkt, msg.Peer, nil
+	case <-ctx.Done():
+		return nil, nil, backend.ErrTimeout
+	}
 }
 
-// SetExpectedSrcPort sets the ID that will be received by this connection. This should
-// only be used when using this connection to receive ICMP error responses from
-// some other connection.
-func (p *Conn) SetExpectedSrcPort(id int) {
-	p.echoID = id
-}
-
-// Sets the time to live of sent packets.
-func (p *Conn) setTTL(ttl int) error {
-	return syscall.SetsockoptInt(p.Fd(), p.ipVer.IPProtoNum(), p.ipVer.TTLSockOpt(), ttl)
-}
-
-// Gets the time to live of sent packets.
-func (p *Conn) ttl() (int, error) {
-	return syscall.GetsockoptInt(p.Fd(), p.ipVer.IPProtoNum(), p.ipVer.TTLSockOpt())
-}
-
-// WriteTo sends an ICMP message.
-func (p *Conn) WriteTo(buf []byte, dest net.Addr, opts ...backend.WriteOption) error {
-	if !p.limiter.Allow() {
+// WriteTo implements backend.Conn.
+func (c *Conn) WriteTo(b []byte, dest net.Addr, opts ...backend.WriteOption) error {
+	if !c.limiter.Allow() {
 		return errors.New("rate limit exceeded")
 	}
-	dest = wrangleAddr(dest)
-	var withTTL int
-	for _, o := range opts {
-		switch o := o.(type) {
-		case backend.TTLOption:
-			withTTL = o.TTL
-		default:
-			log.Panicf("Unsupported option: %#v", o)
-		}
-	}
-	if withTTL != 0 {
-		return p.writeToTTL(buf, dest, withTTL)
-	}
-	return p.writeToNormal(buf, dest)
-}
-
-func (p *Conn) writeToNormal(buf []byte, dest net.Addr) error {
-	p.ttlMu.RLock()
-	defer p.ttlMu.RUnlock()
-	return p.baseWriteTo(buf, dest)
-}
-
-// writeToTTL sends an ICMP message with a given time to live.
-func (p *Conn) writeToTTL(buf []byte, dest net.Addr, ttl int) error {
-	p.ttlMu.Lock()
-	defer p.ttlMu.Unlock()
-	origTTL, err := p.ttl()
-	if err != nil {
-		return fmt.Errorf("unable to get current ttl: %v", err)
-	}
-	defer func() {
-		if err := p.setTTL(origTTL); err != nil {
-			log.Printf("Unable to set ttl: %v", err)
-		}
-	}()
-	if err := p.setTTL(ttl); err != nil {
-		return fmt.Errorf("unable to set ttl: %v", err)
-	}
-	return p.baseWriteTo(buf, dest)
-}
-
-// Core writeTo function. Callers must hold p.mu.
-func (p *Conn) baseWriteTo(buf []byte, dest net.Addr) error {
-	if _, err := p.conn.WriteTo(buf, dest); err != nil {
-		return err
-	}
-	return nil
+	return c.svc.WriteTo(b, dest, opts...)
 }

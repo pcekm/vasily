@@ -6,65 +6,49 @@
 package icmpbase
 
 import (
-	"context"
 	"errors"
 	"net"
 	"syscall"
-	"time"
 
 	"github.com/pcekm/graphping/internal/backend"
+	"github.com/pcekm/graphping/internal/util"
 	"github.com/pcekm/graphping/internal/util/icmppkt"
 	"golang.org/x/sys/unix"
 )
 
-func (c *Conn) ReadFrom(ctx context.Context) (*backend.Packet, net.Addr, error) {
+func (c *internalConn) ReadFrom() (*backend.Packet, net.Addr, listenerKey, error) {
 	c.readMu.Lock()
 	defer c.readMu.Unlock()
-
-	if dl, ok := ctx.Deadline(); ok {
-		if err := c.conn.SetReadDeadline(dl); err != nil {
-			return nil, nil, err
-		}
-	} else if err := c.conn.SetReadDeadline(time.Time{}); err != nil {
-		return nil, nil, err
-	}
 
 	buf := make([]byte, maxMTU)
 	var n int
 	var peer net.Addr
 	var err error
-	for {
-		n, peer, err = c.conn.ReadFrom(buf)
-		if err != nil {
-			var errno unix.Errno
-			if errors.As(err, &errno) && errno == unix.EHOSTUNREACH {
-				// Do we need ID filtering? It may not be necessary because of
-				// the way dgram+icmp sockets work on Linux.
-				return c.readErr(buf)
-			}
-			var opErr *net.OpError
-			if errors.As(err, &opErr) && opErr.Timeout() {
-				return nil, nil, backend.ErrTimeout
-			}
-			return nil, nil, err
+	n, peer, err = c.conn.ReadFrom(buf)
+	if err != nil {
+		var errno unix.Errno
+		if errors.As(err, &errno) && errno == unix.EHOSTUNREACH {
+			return c.readErr(buf)
 		}
-
-		pkt, id, err := icmppkt.Parse(c.ipVer, buf[:n])
-		if err != nil {
-			return nil, nil, err
+		var opErr *net.OpError
+		if errors.As(err, &opErr) && opErr.Timeout() {
+			return nil, nil, listenerKey{}, backend.ErrTimeout
 		}
-		if id != c.EchoID() {
-			continue
-		}
-		return pkt, peer, err
+		return nil, nil, listenerKey{}, err
 	}
+
+	pkt, id, proto, err := icmppkt.Parse(c.ipVer, buf[:n])
+	if err != nil {
+		return nil, nil, listenerKey{}, err
+	}
+	return pkt, peer, listenerKey{ID: id, Proto: proto}, err
 }
 
-func (c *Conn) readErr(buf []byte) (*backend.Packet, net.Addr, error) {
+func (c *internalConn) readErr(buf []byte) (*backend.Packet, net.Addr, listenerKey, error) {
 	var rawconn syscall.RawConn
 	rawconn, err := c.conn.(*net.UDPConn).SyscallConn()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, listenerKey{}, err
 	}
 
 	oob := icmppkt.OOBBytes(c.ipVer)
@@ -78,23 +62,24 @@ func (c *Conn) readErr(buf []byte) (*backend.Packet, net.Addr, error) {
 		return true
 	})
 	if rcErr != nil {
-		return nil, nil, rcErr
+		return nil, nil, listenerKey{}, rcErr
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, listenerKey{}, err
 	}
-	sentPkt, _, err := icmppkt.Parse(c.ipVer, buf[:n])
+	sentPkt, _, _, err := icmppkt.Parse(c.ipVer, buf[:n])
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, listenerKey{}, err
 	}
 	pktType, peer, err := icmppkt.ParseLinuxEE(oob[:oobn])
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, listenerKey{}, err
 	}
 	pkt := &backend.Packet{
 		Type:    pktType,
 		Seq:     sentPkt.Seq,
 		Payload: sentPkt.Payload,
 	}
-	return pkt, peer, nil
+	id := util.Port(c.conn.LocalAddr())
+	return pkt, peer, listenerKey{ID: id, Proto: c.ipVer.ICMPProtoNum()}, nil
 }

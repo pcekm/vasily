@@ -94,9 +94,10 @@ func TestPackets(t *testing.T) {
 	cases := []struct {
 		Name string
 		util.IPVersion
-		In      *icmp.Message
-		WantPkt *backend.Packet
-		WantId  int
+		In        *icmp.Message
+		WantPkt   *backend.Packet
+		WantId    int
+		WantProto int
 	}{
 		{
 			Name:      "ICMP/EchoRequest",
@@ -104,6 +105,7 @@ func TestPackets(t *testing.T) {
 			In:        &icmp.Message{Type: ipv4.ICMPTypeEcho, Body: &icmp.Echo{ID: 1, Seq: 2, Data: []byte{3, 4, 5}}},
 			WantPkt:   &backend.Packet{Type: backend.PacketRequest, Seq: 2, Payload: []byte{3, 4, 5}},
 			WantId:    1,
+			WantProto: syscall.IPPROTO_ICMP,
 		},
 		{
 			Name:      "ICMP/EchoRequest",
@@ -111,6 +113,7 @@ func TestPackets(t *testing.T) {
 			In:        &icmp.Message{Type: ipv6.ICMPTypeEchoRequest, Body: &icmp.Echo{ID: 1, Seq: 2, Data: []byte{3, 4, 5}}},
 			WantPkt:   &backend.Packet{Type: backend.PacketRequest, Seq: 2, Payload: []byte{3, 4, 5}},
 			WantId:    1,
+			WantProto: syscall.IPPROTO_ICMPV6,
 		},
 		{
 			Name:      "ICMP/EchoReply",
@@ -118,6 +121,7 @@ func TestPackets(t *testing.T) {
 			In:        &icmp.Message{Type: ipv4.ICMPTypeEchoReply, Body: &icmp.Echo{ID: 1, Seq: 2, Data: []byte{3, 4, 5}}},
 			WantPkt:   &backend.Packet{Type: backend.PacketReply, Seq: 2, Payload: []byte{3, 4, 5}},
 			WantId:    1,
+			WantProto: syscall.IPPROTO_ICMP,
 		},
 		{
 			Name:      "ICMP/EchoReply",
@@ -125,6 +129,7 @@ func TestPackets(t *testing.T) {
 			In:        &icmp.Message{Type: ipv6.ICMPTypeEchoReply, Body: &icmp.Echo{ID: 1, Seq: 2, Data: []byte{3, 4, 5}}},
 			WantPkt:   &backend.Packet{Type: backend.PacketReply, Seq: 2, Payload: []byte{3, 4, 5}},
 			WantId:    1,
+			WantProto: syscall.IPPROTO_ICMPV6,
 		},
 		{
 			Name:      "ICMP/TimeExceeded",
@@ -132,6 +137,7 @@ func TestPackets(t *testing.T) {
 			In:        &icmp.Message{Type: ipv4.ICMPTypeTimeExceeded, Body: &icmp.TimeExceeded{Data: echoReply(t, util.IPv4, 1, 2, []byte{3, 4, 5})}},
 			WantPkt:   &backend.Packet{Type: backend.PacketTimeExceeded, Seq: 2, Payload: []byte{3, 4, 5}},
 			WantId:    1,
+			WantProto: syscall.IPPROTO_ICMP,
 		},
 		{
 			Name:      "ICMP/TimeExceeded",
@@ -139,6 +145,7 @@ func TestPackets(t *testing.T) {
 			In:        &icmp.Message{Type: ipv6.ICMPTypeTimeExceeded, Body: &icmp.TimeExceeded{Data: echoReply(t, util.IPv6, 1, 2, []byte{3, 4, 5})}},
 			WantPkt:   &backend.Packet{Type: backend.PacketTimeExceeded, Seq: 2, Payload: []byte{3, 4, 5}},
 			WantId:    1,
+			WantProto: syscall.IPPROTO_ICMPV6,
 		},
 		{
 			Name:      "ICMP/DestinationUnreachable",
@@ -146,6 +153,7 @@ func TestPackets(t *testing.T) {
 			In:        &icmp.Message{Type: ipv4.ICMPTypeDestinationUnreachable, Body: &icmp.DstUnreach{Data: echoReply(t, util.IPv4, 1, 2, []byte{3, 4, 5})}},
 			WantPkt:   &backend.Packet{Type: backend.PacketDestinationUnreachable, Seq: 2, Payload: []byte{3, 4, 5}},
 			WantId:    1,
+			WantProto: syscall.IPPROTO_ICMP,
 		},
 		{
 			Name:      "ICMP/DestinationUnreachable",
@@ -153,6 +161,7 @@ func TestPackets(t *testing.T) {
 			In:        &icmp.Message{Type: ipv6.ICMPTypeDestinationUnreachable, Body: &icmp.DstUnreach{Data: echoReply(t, util.IPv6, 1, 2, []byte{3, 4, 5})}},
 			WantPkt:   &backend.Packet{Type: backend.PacketDestinationUnreachable, Seq: 2, Payload: []byte{3, 4, 5}},
 			WantId:    1,
+			WantProto: syscall.IPPROTO_ICMPV6,
 		},
 		{
 			Name:      "UDP/TimeExceeded",
@@ -160,6 +169,7 @@ func TestPackets(t *testing.T) {
 			In:        &icmp.Message{Type: ipv4.ICMPTypeTimeExceeded, Body: &icmp.TimeExceeded{Data: udpPing(t, util.IPv4, 1, 2, []byte{3, 4, 5})}},
 			WantPkt:   &backend.Packet{Type: backend.PacketTimeExceeded, Seq: 2, Payload: []byte{3, 4, 5}},
 			WantId:    1,
+			WantProto: syscall.IPPROTO_UDP,
 		},
 		{
 			Name:      "UDP/TimeExceeded",
@@ -167,6 +177,7 @@ func TestPackets(t *testing.T) {
 			In:        &icmp.Message{Type: ipv6.ICMPTypeTimeExceeded, Body: &icmp.TimeExceeded{Data: udpPing(t, util.IPv6, 1, 2, []byte{3, 4, 5})}},
 			WantPkt:   &backend.Packet{Type: backend.PacketTimeExceeded, Seq: 2, Payload: []byte{3, 4, 5}},
 			WantId:    1,
+			WantProto: syscall.IPPROTO_UDP,
 		},
 		{
 			Name:      "UDP/DestinationUnreachable",
@@ -174,6 +185,7 @@ func TestPackets(t *testing.T) {
 			In:        &icmp.Message{Type: ipv4.ICMPTypeDestinationUnreachable, Body: &icmp.DstUnreach{Data: udpPing(t, util.IPv4, 1, 2, []byte{3, 4, 5})}},
 			WantPkt:   &backend.Packet{Type: backend.PacketDestinationUnreachable, Seq: 2, Payload: []byte{3, 4, 5}},
 			WantId:    1,
+			WantProto: syscall.IPPROTO_UDP,
 		},
 		{
 			Name:      "UDP/DestinationUnreachable",
@@ -181,6 +193,7 @@ func TestPackets(t *testing.T) {
 			In:        &icmp.Message{Type: ipv6.ICMPTypeDestinationUnreachable, Body: &icmp.DstUnreach{Data: udpPing(t, util.IPv6, 1, 2, []byte{3, 4, 5})}},
 			WantPkt:   &backend.Packet{Type: backend.PacketDestinationUnreachable, Seq: 2, Payload: []byte{3, 4, 5}},
 			WantId:    1,
+			WantProto: syscall.IPPROTO_UDP,
 		},
 		{
 			Name:      "UDP/PortUnreachable",
@@ -188,6 +201,7 @@ func TestPackets(t *testing.T) {
 			In:        &icmp.Message{Type: ipv4.ICMPTypeDestinationUnreachable, Code: codePortUnreachableV4, Body: &icmp.DstUnreach{Data: udpPing(t, util.IPv4, 1, 2, []byte{3, 4, 5})}},
 			WantPkt:   &backend.Packet{Type: backend.PacketReply, Seq: 2, Payload: []byte{3, 4, 5}},
 			WantId:    1,
+			WantProto: syscall.IPPROTO_UDP,
 		},
 		{
 			Name:      "UDP/PortUnreachable",
@@ -195,6 +209,7 @@ func TestPackets(t *testing.T) {
 			In:        &icmp.Message{Type: ipv6.ICMPTypeDestinationUnreachable, Code: codePortUnreachableV6, Body: &icmp.DstUnreach{Data: udpPing(t, util.IPv6, 1, 2, []byte{3, 4, 5})}},
 			WantPkt:   &backend.Packet{Type: backend.PacketReply, Seq: 2, Payload: []byte{3, 4, 5}},
 			WantId:    1,
+			WantProto: syscall.IPPROTO_UDP,
 		},
 	}
 	for _, c := range cases {
@@ -203,7 +218,7 @@ func TestPackets(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Marshal error: %v", err)
 			}
-			got, id, err := Parse(c.IPVersion, buf)
+			got, id, proto, err := Parse(c.IPVersion, buf)
 			if err != nil {
 				t.Fatalf("Conversion error: %v", err)
 			}
@@ -212,6 +227,9 @@ func TestPackets(t *testing.T) {
 			}
 			if id != c.WantId {
 				t.Errorf("Wrong id: %d (want %d)", id, c.WantId)
+			}
+			if proto != c.WantProto {
+				t.Errorf("Wrong proto: %d (want %d)", proto, c.WantProto)
 			}
 		})
 	}

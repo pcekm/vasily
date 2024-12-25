@@ -7,6 +7,7 @@ import (
 
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/privsep/messages"
+	"github.com/pcekm/graphping/internal/util"
 )
 
 // Connection is a single ping connection.
@@ -33,7 +34,7 @@ func (c *Connection) WriteTo(pkt *backend.Packet, dest net.Addr, opts ...backend
 	msg := messages.SendPing{
 		ID:     c.id,
 		Packet: *pkt,
-		Addr:   dest.(*net.UDPAddr).IP,
+		Addr:   util.IP(dest),
 	}
 	for _, o := range opts {
 		switch o := o.(type) {

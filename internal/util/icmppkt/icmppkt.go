@@ -21,10 +21,10 @@ const (
 )
 
 // Parse parses an ICMP packet.
-func Parse(ipVer util.IPVersion, buf []byte) (pkt *backend.Packet, id int, err error) {
+func Parse(ipVer util.IPVersion, buf []byte) (pkt *backend.Packet, id, proto int, err error) {
 	rm, err := icmp.ParseMessage(ipVer.ICMPProtoNum(), buf)
 	if err != nil {
-		return nil, -1, fmt.Errorf("parsing message: %v", err)
+		return nil, -1, -1, fmt.Errorf("parsing message: %v", err)
 	}
 
 	switch rm.Type {
@@ -35,11 +35,11 @@ func Parse(ipVer util.IPVersion, buf []byte) (pkt *backend.Packet, id int, err e
 	case ipv4.ICMPTypeTimeExceeded, ipv6.ICMPTypeTimeExceeded:
 		return timeExceededToPacket(ipVer, rm)
 	default:
-		return nil, -1, fmt.Errorf("unhandled ICMP type: %v", rm.Type)
+		return nil, -1, -1, fmt.Errorf("unhandled ICMP type: %v", rm.Type)
 	}
 }
 
-func echoToPacket(msg *icmp.Message) (*backend.Packet, int, error) {
+func echoToPacket(msg *icmp.Message) (*backend.Packet, int, int, error) {
 	var packetType backend.PacketType
 	switch msg.Type {
 	case ipv4.ICMPTypeEcho, ipv6.ICMPTypeEchoRequest:
@@ -54,14 +54,14 @@ func echoToPacket(msg *icmp.Message) (*backend.Packet, int, error) {
 		Type:    packetType,
 		Seq:     body.Seq,
 		Payload: body.Data,
-	}, body.ID, nil
+	}, body.ID, msg.Type.Protocol(), nil
 }
 
-func destUnreachableToPacket(ipVer util.IPVersion, msg *icmp.Message) (*backend.Packet, int, error) {
+func destUnreachableToPacket(ipVer util.IPVersion, msg *icmp.Message) (*backend.Packet, int, int, error) {
 	body := msg.Body.(*icmp.DstUnreach)
-	pkt, id, err := ipBodyToPacket(ipVer, body.Data)
+	pkt, id, proto, err := ipBodyToPacket(ipVer, body.Data)
 	if err != nil {
-		return nil, -1, err
+		return nil, -1, -1, err
 	}
 	portUnreachable := (ipVer == util.IPv4 && msg.Code == codePortUnreachableV4) || (ipVer == util.IPv6 && msg.Code == codePortUnreachableV6)
 	if portUnreachable {
@@ -72,33 +72,33 @@ func destUnreachableToPacket(ipVer util.IPVersion, msg *icmp.Message) (*backend.
 	} else {
 		pkt.Type = backend.PacketDestinationUnreachable
 	}
-	return pkt, id, err
+	return pkt, id, proto, err
 }
 
-func timeExceededToPacket(ipVer util.IPVersion, msg *icmp.Message) (*backend.Packet, int, error) {
+func timeExceededToPacket(ipVer util.IPVersion, msg *icmp.Message) (*backend.Packet, int, int, error) {
 	body := msg.Body.(*icmp.TimeExceeded)
-	pkt, id, err := ipBodyToPacket(ipVer, body.Data)
+	pkt, id, proto, err := ipBodyToPacket(ipVer, body.Data)
 	if err != nil {
-		return nil, -1, err
+		return nil, -1, -1, err
 	}
 	pkt.Type = backend.PacketTimeExceeded
-	return pkt, id, err
+	return pkt, id, proto, err
 }
 
-func ipBodyToPacket(ipVer util.IPVersion, buf []byte) (*backend.Packet, int, error) {
+func ipBodyToPacket(ipVer util.IPVersion, buf []byte) (*backend.Packet, int, int, error) {
 	var proto, headerLen int
 	switch ipVer {
 	case util.IPv4:
 		ipHeader, err := ipv4.ParseHeader(buf)
 		if err != nil {
-			return nil, -1, fmt.Errorf("parse header: %v", err)
+			return nil, -1, -1, fmt.Errorf("parse header: %v", err)
 		}
 		proto = ipHeader.Protocol
 		headerLen = ipHeader.Len
 	case util.IPv6:
 		ipHeader, err := ipv6.ParseHeader(buf)
 		if err != nil {
-			return nil, -1, fmt.Errorf("parse header: %v", err)
+			return nil, -1, -1, fmt.Errorf("parse header: %v", err)
 		}
 		proto = ipHeader.NextHeader
 		headerLen = ipv6.HeaderLen
@@ -112,20 +112,20 @@ func ipBodyToPacket(ipVer util.IPVersion, buf []byte) (*backend.Packet, int, err
 	case syscall.IPPROTO_UDP:
 		return decodeUDP(buf[headerLen:])
 	default:
-		return nil, -1, fmt.Errorf("unrecognized proto field: %v", proto)
+		return nil, -1, -1, fmt.Errorf("unrecognized proto field: %v", proto)
 	}
 }
 
 // Decodes a UDP packet into a backend.Packet. The caller must set the Type
 // field.
-func decodeUDP(buf []byte) (*backend.Packet, int, error) {
+func decodeUDP(buf []byte) (*backend.Packet, int, int, error) {
 	udph, err := udppkt.ParseUDPHeader(buf)
 	if err != nil {
-		return nil, -1, fmt.Errorf("parse UDP header: %v", err)
+		return nil, -1, -1, fmt.Errorf("parse UDP header: %v", err)
 	}
 	var payload []byte
 	if len(buf) > udppkt.UDPHeaderLen {
 		payload = buf[udppkt.UDPHeaderLen:]
 	}
-	return &backend.Packet{Seq: int(udph.DstPort), Payload: payload}, int(udph.SrcPort), nil
+	return &backend.Packet{Seq: int(udph.DstPort), Payload: payload}, int(udph.SrcPort), syscall.IPPROTO_UDP, nil
 }

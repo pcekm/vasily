@@ -102,7 +102,7 @@ func TestParseLinuxEE(t *testing.T) {
 			if pktType != c.WantType {
 				t.Errorf("Wrong packet type: %v (want %v)", pktType, c.WantType)
 			}
-			if !peer.(*net.UDPAddr).IP.Equal(c.WantAddr) {
+			if !util.IP(peer).Equal(c.WantAddr) {
 				t.Errorf("Wrong address: %v (want %v)", peer, c.WantAddr)
 			}
 		})

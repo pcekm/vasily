@@ -156,7 +156,7 @@ func (c *Conn) setTTL(ttl int) (err error) {
 }
 
 func (c *Conn) localPort() int {
-	return c.conn.LocalAddr().(*net.UDPAddr).Port
+	return util.Port(c.conn.LocalAddr())
 }
 
 // ReadFrom receives a reply. The received packet will likely not include any
@@ -181,7 +181,7 @@ func (c *Conn) ReadFrom(ctx context.Context) (*backend.Packet, net.Addr, error) 
 		// sent a response. That's unexpected. Deal with it as best as possible.
 		return &backend.Packet{
 			Type:    backend.PacketReply,
-			Seq:     peer.(*net.UDPAddr).Port - c.getBasePort(),
+			Seq:     util.Port(peer) - c.getBasePort(),
 			Payload: buf[:n],
 		}, peer, nil
 	}

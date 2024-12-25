@@ -39,8 +39,8 @@ func New(ipVer util.IPVersion) (*PingConn, error) {
 	return baseNew(ipVer, icmpbase.New)
 }
 
-func baseNew(ipVer util.IPVersion, mkConn func(util.IPVersion) (*icmpbase.Conn, error)) (*PingConn, error) {
-	conn, err := mkConn(ipVer)
+func baseNew(ipVer util.IPVersion, mkConn func(util.IPVersion, int, int) (*icmpbase.Conn, error)) (*PingConn, error) {
+	conn, err := mkConn(ipVer, 0, ipVer.ICMPProtoNum())
 	if err != nil {
 		return nil, err
 	}
