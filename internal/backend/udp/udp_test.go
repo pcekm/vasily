@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net"
+	"runtime"
 	"testing"
 	"time"
 
@@ -14,8 +15,17 @@ import (
 	"github.com/pcekm/graphping/internal/util"
 )
 
-func TestWriteTo(t *testing.T) {
+var (
+	supportedPlatforms = map[string]bool{
+		"darwin": true,
+		"linux":  true,
+	}
+)
 
+func TestWriteTo(t *testing.T) {
+	if !supportedPlatforms[runtime.GOOS] {
+		t.Skipf("Unsupported platform: %v", runtime.GOOS)
+	}
 	cases := []struct {
 		IPVer    util.IPVersion
 		Dest     *net.UDPAddr
