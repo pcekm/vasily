@@ -34,3 +34,11 @@ func newInternalConn(ipVer util.IPVersion) (*internalConn, error) {
 	}
 	return p, nil
 }
+
+// Core writeTo function. Callers must hold p.mu.
+func (p *internalConn) baseWriteTo(buf []byte, dest net.Addr) error {
+	if _, err := p.conn.WriteTo(buf, &net.IPAddr{IP: util.IP(dest)}); err != nil {
+		return err
+	}
+	return nil
+}

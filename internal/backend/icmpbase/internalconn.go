@@ -92,11 +92,3 @@ func (p *internalConn) writeToTTL(buf []byte, dest net.Addr, ttl int) error {
 	}
 	return p.baseWriteTo(buf, dest)
 }
-
-// Core writeTo function. Callers must hold p.mu.
-func (p *internalConn) baseWriteTo(buf []byte, dest net.Addr) error {
-	if _, err := p.conn.WriteTo(buf, dest); err != nil {
-		return err
-	}
-	return nil
-}
