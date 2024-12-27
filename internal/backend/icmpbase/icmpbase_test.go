@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"runtime"
+	"syscall"
 	"testing"
 	"time"
 
@@ -71,7 +72,7 @@ func unmarshal(t *testing.T, ipVer util.IPVersion, buf []byte) *icmp.Message {
 }
 
 func TestPingConnection(t *testing.T) {
-	if !supportedOS[runtime.GOOS] {
+	if !supportedOS[runtime.GOOS] && syscall.Getuid() != 0 {
 		t.Skipf("Unsupported OS")
 	}
 	cases := []struct {
@@ -127,7 +128,7 @@ func TestPingConnection(t *testing.T) {
 					if diff := cmp.Diff(want, gotMsg); diff != "" {
 						t.Errorf("Wrong packet received (-want, +got):\n%v", diff)
 					}
-					if diff := cmp.Diff(c.dest, gotPeer); diff != "" {
+					if diff := test.DiffIP(c.dest, gotPeer); diff != "" {
 						t.Errorf("Wrong response peer (-want, +got):\n%v", diff)
 					}
 				}
@@ -137,7 +138,7 @@ func TestPingConnection(t *testing.T) {
 }
 
 func TestConnectionCountLimit(t *testing.T) {
-	if !supportedOS[runtime.GOOS] {
+	if !supportedOS[runtime.GOOS] && syscall.Getuid() != 0 {
 		t.Skipf("Unsupported OS")
 	}
 

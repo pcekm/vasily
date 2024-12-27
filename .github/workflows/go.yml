@@ -15,6 +15,8 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
+        tags: ["", "-tags=rawsock"]
+        race: ["", "-race"]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -46,10 +48,10 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.23'
+          go-version-file: 'go.mod'
 
       - name: Build
-        run: go build -v ./...
+        run: go build ${{ matrix.tags }} ${{ matrix.race }} -v ./...
 
       - name: Test
-        run: go test -v ./...
+        run: go test ${{ matrix.tags }} ${{ matrix.race }} -v ./...

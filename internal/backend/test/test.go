@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/util"
 	"go.uber.org/mock/gomock"
@@ -206,4 +207,11 @@ func InjectID(id int) func() {
 	return func() {
 		util.IDGenerator = orig
 	}
+}
+
+// DiffIP compares the IP part of two net.Addrs. Returns "" if they're the same,
+// or a message if they're not.
+func DiffIP(a, b net.Addr) string {
+	ipa, ipb := util.IP(a), util.IP(b)
+	return cmp.Diff(ipa, ipb)
 }

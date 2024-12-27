@@ -60,8 +60,8 @@ chmod u+s /usr/local/bin/graphping
 
 Depending on your distribution, you may need to adjust a setting on your Linux
 machine to enable unprivileged pings. If it panics with
-`listen error: permission denied`, change the `net.ipv4.ping_group_range`.
-Something like this, followed by a reboot should do it:
+`listen error: permission denied`, change `net.ipv4.ping_group_range`. Something
+like this, followed by a reboot should do it:
 
 ```shell
 # As root:

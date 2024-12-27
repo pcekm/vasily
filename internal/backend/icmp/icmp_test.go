@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"net"
 	"runtime"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pcekm/graphping/internal/backend"
 	"github.com/pcekm/graphping/internal/backend/icmpbase"
+	"github.com/pcekm/graphping/internal/backend/test"
 	"github.com/pcekm/graphping/internal/util"
 )
 
@@ -32,7 +34,7 @@ func asReply(pkt *backend.Packet) *backend.Packet {
 }
 
 func TestPingConnection(t *testing.T) {
-	if !supportedOS[runtime.GOOS] {
+	if !supportedOS[runtime.GOOS] && syscall.Getuid() != 0 {
 		t.Skipf("Unsupported OS")
 	}
 	cases := []struct {
@@ -80,7 +82,7 @@ func TestPingConnection(t *testing.T) {
 					t.Errorf("Wrong packet received (-want, +got):\n%v", diff)
 				}
 
-				if diff := cmp.Diff(c.dest, gotPeer); diff != "" {
+				if diff := test.DiffIP(c.dest, gotPeer); diff != "" {
 					t.Errorf("Wrong response peer (-want, +got):\n%v", diff)
 				}
 			}
@@ -89,7 +91,7 @@ func TestPingConnection(t *testing.T) {
 }
 
 func TestConnectionCountLimit(t *testing.T) {
-	if !supportedOS[runtime.GOOS] {
+	if !supportedOS[runtime.GOOS] && syscall.Getuid() != 0 {
 		t.Skipf("Unsupported OS")
 	}
 

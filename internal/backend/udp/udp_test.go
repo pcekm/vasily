@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"runtime"
+	"syscall"
 	"testing"
 	"time"
 
@@ -16,14 +17,14 @@ import (
 )
 
 var (
-	supportedPlatforms = map[string]bool{
+	supportedOS = map[string]bool{
 		"darwin": true,
 		"linux":  true,
 	}
 )
 
 func TestWriteTo(t *testing.T) {
-	if !supportedPlatforms[runtime.GOOS] {
+	if !supportedOS[runtime.GOOS] && syscall.Getuid() != 0 {
 		t.Skipf("Unsupported platform: %v", runtime.GOOS)
 	}
 	cases := []struct {
@@ -98,7 +99,7 @@ func TestWriteTo(t *testing.T) {
 					}
 				}
 
-				if diff := cmp.Diff(c.WantPeer, peer); diff != "" {
+				if diff := test.DiffIP(c.WantPeer, peer); diff != "" {
 					t.Errorf("Wrong peer (-want, +got):\n%v", diff)
 				}
 			}

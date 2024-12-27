@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"runtime"
+	"syscall"
 	"testing"
 	"time"
 
@@ -26,12 +27,15 @@ var (
 // Diffs two PingResults while accounting for the latency and timestamps.
 func diffPingResults[T any](a, b T) string {
 	return cmp.Diff(a, b,
+		cmp.Comparer(func(a, b net.Addr) bool {
+			return util.IP(a).Equal(util.IP(b))
+		}),
 		cmp.FilterValues(func(t1, t2 time.Duration) bool { return true }, cmp.Ignore()),
 		cmp.FilterValues(func(t1, t2 time.Time) bool { return true }, cmp.Ignore()))
 }
 
 func TestLive(t *testing.T) {
-	if !supportedOS[runtime.GOOS] {
+	if !supportedOS[runtime.GOOS] && syscall.Getuid() != 0 {
 		t.Skipf("Unsupported OS")
 	}
 	opts := &Options{

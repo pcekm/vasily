@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"syscall"
 	"testing"
 	"time"
 
@@ -150,7 +151,7 @@ func TestPrivilegeDrop_SmokeTest(t *testing.T) {
 // A real ping test of the loopback address. Only works on Darwin since it
 // doesn't require privileges.
 func TestPingLoopback(t *testing.T) {
-	if !supportedOS[runtime.GOOS] {
+	if !supportedOS[runtime.GOOS] && syscall.Getuid() != 0 {
 		t.Skipf("Unsupported OS: %v", runtime.GOOS)
 	}
 
