@@ -10,15 +10,15 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/lookup"
-	"github.com/pcekm/graphping/internal/pinger"
-	"github.com/pcekm/graphping/internal/tracer"
-	"github.com/pcekm/graphping/internal/tui/nav"
-	"github.com/pcekm/graphping/internal/tui/sortselect"
-	"github.com/pcekm/graphping/internal/tui/table"
-	"github.com/pcekm/graphping/internal/tui/theme"
-	"github.com/pcekm/graphping/internal/util"
+	"github.com/pcekm/vasily/internal/backend"
+	"github.com/pcekm/vasily/internal/lookup"
+	"github.com/pcekm/vasily/internal/pinger"
+	"github.com/pcekm/vasily/internal/tracer"
+	"github.com/pcekm/vasily/internal/tui/nav"
+	"github.com/pcekm/vasily/internal/tui/sortselect"
+	"github.com/pcekm/vasily/internal/tui/table"
+	"github.com/pcekm/vasily/internal/tui/theme"
+	"github.com/pcekm/vasily/internal/util"
 )
 
 const (

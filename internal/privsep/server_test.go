@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/pcekm/graphping/internal/backend"
-	_ "github.com/pcekm/graphping/internal/backend/icmp"
-	"github.com/pcekm/graphping/internal/privsep/messages"
-	"github.com/pcekm/graphping/internal/util"
+	"github.com/pcekm/vasily/internal/backend"
+	_ "github.com/pcekm/vasily/internal/backend/icmp"
+	"github.com/pcekm/vasily/internal/privsep/messages"
+	"github.com/pcekm/vasily/internal/util"
 )
 
 var (

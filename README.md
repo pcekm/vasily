@@ -1,8 +1,8 @@
-# Graphping
+# Vasily
 
-[![Go](https://github.com/pcekm/graphping/actions/workflows/go.yml/badge.svg)](https://github.com/pcekm/graphping/actions/workflows/go.yml)
+[![Go](https://github.com/pcekm/vasily/actions/workflows/go.yml/badge.svg)](https://github.com/pcekm/vasily/actions/workflows/go.yml)
 
-Graphping is a network troubleshooting utility that's a combination of ping,
+Vasily is a network troubleshooting utility that's a combination of ping,
 traceroute, and top. It repeatedly pings multiple hosts and displays the results
 in an easy-to-read format.
 
@@ -10,7 +10,7 @@ in an easy-to-read format.
 
 ## Requirements
 
-Graphping has been tested with Go 1.23 on recent versions of:
+Vasily has been tested with Go 1.23 on recent versions of:
 
 - macOS (both unprivileged ICMP and raw sockets)
 - Linux (both unprivileged ICMP and raw sockets)
@@ -25,8 +25,8 @@ have standard support for raw sockets. Windows is currently unsupported.
 You will need [Go](https://go.dev/doc/install) version 1.23 or higher:
 
 ```shell
-git clone https://github.com/pcekm/graphping
-cd graphping
+git clone https://github.com/pcekm/vasily
+cd vasily
 go build .
 ```
 
@@ -44,16 +44,16 @@ it to where you want it (e.g. `/usr/local/bin`). (But see the caveats about
 unprivileged ICMP on Linux below.)
 
 ```shell
-cp graphping /usr/local/bin
+cp vasily /usr/local/bin
 ```
 
 For other systems that use raw sockets, you will also need to adjust its
 ownership and permissions so that it runs setuid root.
 
 ```shell
-cp graphping /usr/local/bin
-chown 0:0 /usr/local/bin/graphping
-chmod u+s /usr/local/bin/graphping
+cp vasily /usr/local/bin
+chown 0:0 /usr/local/bin/vasily
+chmod u+s /usr/local/bin/vasily
 ```
 
 ### Linux unprivileged ICMP

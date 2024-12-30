@@ -8,8 +8,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/util"
+	"github.com/pcekm/vasily/internal/backend"
+	"github.com/pcekm/vasily/internal/util"
 )
 
 const (

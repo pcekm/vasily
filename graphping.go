@@ -1,4 +1,4 @@
-// Command graphping is a ping utility that displays pings to multiple hosts in
+// Command vasily is a ping utility that displays pings to multiple hosts in
 // a concise bar chart format. It can also ping the entire path to a remote host
 // with the --path flag.
 package main
@@ -14,12 +14,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/pflag"
 
-	"github.com/pcekm/graphping/internal/backend"
-	_ "github.com/pcekm/graphping/internal/backend/icmp"
-	_ "github.com/pcekm/graphping/internal/backend/udp"
-	"github.com/pcekm/graphping/internal/lookup"
-	"github.com/pcekm/graphping/internal/privsep"
-	"github.com/pcekm/graphping/internal/tui"
+	"github.com/pcekm/vasily/internal/backend"
+	_ "github.com/pcekm/vasily/internal/backend/icmp"
+	_ "github.com/pcekm/vasily/internal/backend/udp"
+	"github.com/pcekm/vasily/internal/lookup"
+	"github.com/pcekm/vasily/internal/privsep"
+	"github.com/pcekm/vasily/internal/tui"
 )
 
 const maxPingInterval = time.Second
@@ -96,7 +96,7 @@ func main() {
 }
 
 func printVersionInfo() {
-	name := "graphping"
+	name := "vasily"
 	goVer := "unknown go version"
 	if inf, ok := debug.ReadBuildInfo(); ok {
 		name = path.Base(inf.Path)

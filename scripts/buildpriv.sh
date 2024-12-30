@@ -5,5 +5,5 @@
 set -o errexit
 
 go build "$@"
-sudo chown 0:0 graphping
-sudo chmod u+s graphping
+sudo chown 0:0 vasily
+sudo chmod u+s vasily

@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/util"
+	"github.com/pcekm/vasily/internal/backend"
+	"github.com/pcekm/vasily/internal/util"
 )
 
 // Makes a raw message that is as long as it can possibly be. (About 64k).

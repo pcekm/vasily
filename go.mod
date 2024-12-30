@@ -1,4 +1,4 @@
-module github.com/pcekm/graphping
+module github.com/pcekm/vasily
 
 go 1.23
 

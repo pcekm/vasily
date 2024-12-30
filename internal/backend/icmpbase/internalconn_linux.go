@@ -7,7 +7,7 @@ import (
 	"net"
 	"os"
 
-	"github.com/pcekm/graphping/internal/util"
+	"github.com/pcekm/vasily/internal/util"
 	"golang.org/x/sys/unix"
 )
 

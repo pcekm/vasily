@@ -10,9 +10,9 @@ import (
 	"net"
 	"syscall"
 
-	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/util"
-	"github.com/pcekm/graphping/internal/util/icmppkt"
+	"github.com/pcekm/vasily/internal/backend"
+	"github.com/pcekm/vasily/internal/util"
+	"github.com/pcekm/vasily/internal/util/icmppkt"
 	"golang.org/x/sys/unix"
 )
 

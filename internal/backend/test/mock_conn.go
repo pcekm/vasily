@@ -14,7 +14,7 @@ import (
 	net "net"
 	reflect "reflect"
 
-	backend "github.com/pcekm/graphping/internal/backend"
+	backend "github.com/pcekm/vasily/internal/backend"
 	gomock "go.uber.org/mock/gomock"
 )
 

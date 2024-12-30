@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/backend/test"
-	"github.com/pcekm/graphping/internal/privsep/messages"
-	"github.com/pcekm/graphping/internal/util"
+	"github.com/pcekm/vasily/internal/backend"
+	"github.com/pcekm/vasily/internal/backend/test"
+	"github.com/pcekm/vasily/internal/privsep/messages"
+	"github.com/pcekm/vasily/internal/util"
 )
 
 type messageHandler func(messages.Message) messages.Message

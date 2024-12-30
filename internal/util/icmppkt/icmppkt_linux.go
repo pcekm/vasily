@@ -22,8 +22,8 @@ import (
 	"strconv"
 	"unsafe"
 
-	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/util"
+	"github.com/pcekm/vasily/internal/backend"
+	"github.com/pcekm/vasily/internal/util"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 	"golang.org/x/sys/unix"

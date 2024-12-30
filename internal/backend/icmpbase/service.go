@@ -3,7 +3,7 @@ package icmpbase
 import (
 	"net"
 
-	"github.com/pcekm/graphping/internal/backend"
+	"github.com/pcekm/vasily/internal/backend"
 )
 
 type readResult struct {

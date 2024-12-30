@@ -9,8 +9,8 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/util"
+	"github.com/pcekm/vasily/internal/backend"
+	"github.com/pcekm/vasily/internal/util"
 )
 
 type internalConn struct {

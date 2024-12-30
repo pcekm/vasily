@@ -10,9 +10,9 @@ import (
 	"os"
 	"sync"
 
-	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/privsep/messages"
-	"github.com/pcekm/graphping/internal/util"
+	"github.com/pcekm/vasily/internal/backend"
+	"github.com/pcekm/vasily/internal/privsep/messages"
+	"github.com/pcekm/vasily/internal/util"
 )
 
 // Client is the client for the privsep server.

@@ -5,7 +5,7 @@ import (
 	"github.com/charmbracelet/bubbles/help"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/pcekm/graphping/internal/tui/theme"
+	"github.com/pcekm/vasily/internal/tui/theme"
 )
 
 type Model struct {

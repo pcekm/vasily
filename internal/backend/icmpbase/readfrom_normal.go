@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/util/icmppkt"
+	"github.com/pcekm/vasily/internal/backend"
+	"github.com/pcekm/vasily/internal/util/icmppkt"
 )
 
 // ReadFrom Reads an ICMP message.

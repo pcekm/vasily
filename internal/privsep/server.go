@@ -11,10 +11,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/backend/icmp"
-	"github.com/pcekm/graphping/internal/privsep/messages"
-	"github.com/pcekm/graphping/internal/util"
+	"github.com/pcekm/vasily/internal/backend"
+	"github.com/pcekm/vasily/internal/backend/icmp"
+	"github.com/pcekm/vasily/internal/privsep/messages"
+	"github.com/pcekm/vasily/internal/util"
 )
 
 type connMaker func() *icmp.PingConn

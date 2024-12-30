@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pcekm/graphping/internal/pinger"
-	"github.com/pcekm/graphping/internal/tui/help"
-	"github.com/pcekm/graphping/internal/tui/nav"
-	"github.com/pcekm/graphping/internal/tui/theme"
+	"github.com/pcekm/vasily/internal/pinger"
+	"github.com/pcekm/vasily/internal/tui/help"
+	"github.com/pcekm/vasily/internal/tui/nav"
+	"github.com/pcekm/vasily/internal/tui/theme"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"

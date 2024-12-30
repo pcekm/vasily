@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/backend/test"
-	"github.com/pcekm/graphping/internal/util"
+	"github.com/pcekm/vasily/internal/backend"
+	"github.com/pcekm/vasily/internal/backend/test"
+	"github.com/pcekm/vasily/internal/util"
 	"go.uber.org/mock/gomock"
 )
 

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/pcekm/graphping/internal/backend"
+	"github.com/pcekm/vasily/internal/backend"
 	"go.uber.org/mock/gomock"
 )
 

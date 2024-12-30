@@ -10,7 +10,7 @@ import (
 	"github.com/charmbracelet/x/term"
 	"github.com/mattn/go-isatty"
 	"github.com/muesli/termenv"
-	"github.com/pcekm/graphping/internal/tui/theme"
+	"github.com/pcekm/vasily/internal/tui/theme"
 )
 
 func main() {

@@ -84,8 +84,8 @@ import (
 	"os/exec"
 	"syscall"
 
-	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/privsep/client"
+	"github.com/pcekm/vasily/internal/backend"
+	"github.com/pcekm/vasily/internal/privsep/client"
 )
 
 const (
@@ -113,7 +113,7 @@ func Initialize() func() {
 		log.Fatalf("Can't determine self executable: %v", err)
 	}
 	cmd := exec.Command(me, startPrivFlag)
-	cmd.Args[0] = "graphping"
+	cmd.Args[0] = "vasily"
 	cmd.Env = []string{}
 
 	clientIn, err := cmd.StdoutPipe()

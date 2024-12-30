@@ -11,7 +11,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/pcekm/graphping/internal/util"
+	"github.com/pcekm/vasily/internal/util"
 	"github.com/spf13/pflag"
 )
 

@@ -7,9 +7,9 @@ import (
 	"log"
 	"syscall"
 
-	"github.com/pcekm/graphping/internal/backend"
-	"github.com/pcekm/graphping/internal/util"
-	"github.com/pcekm/graphping/internal/util/udppkt"
+	"github.com/pcekm/vasily/internal/backend"
+	"github.com/pcekm/vasily/internal/util"
+	"github.com/pcekm/vasily/internal/util/udppkt"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"

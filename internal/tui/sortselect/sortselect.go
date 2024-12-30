@@ -9,10 +9,10 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/pcekm/graphping/internal/tui/help"
-	"github.com/pcekm/graphping/internal/tui/nav"
-	"github.com/pcekm/graphping/internal/tui/table"
-	"github.com/pcekm/graphping/internal/tui/theme"
+	"github.com/pcekm/vasily/internal/tui/help"
+	"github.com/pcekm/vasily/internal/tui/nav"
+	"github.com/pcekm/vasily/internal/tui/table"
+	"github.com/pcekm/vasily/internal/tui/theme"
 )
 
 type keyMap struct {
