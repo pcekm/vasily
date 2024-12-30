@@ -27,14 +27,14 @@ You will need [Go](https://go.dev/doc/install) version 1.23 or higher:
 ```shell
 git clone https://github.com/pcekm/vasily
 cd vasily
-go build .
+./scripts/buildrelease.sh
 ```
 
 By default, Linux and macOS use unprivileged ICMP. To force the use of raw
 sockets, build with the `rawsock` tag:
 
 ```shell
-go build -tags=rawsock .
+./scripts/buildrelease.sh -tags=rawsock
 ```
 
 ## Installing

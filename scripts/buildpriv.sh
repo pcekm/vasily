@@ -4,6 +4,6 @@
 
 set -o errexit
 
-go build "$@"
+go build "$@" -o vasily ./cmd
 sudo chown 0:0 vasily
 sudo chmod u+s vasily
