@@ -62,15 +62,6 @@ func marshal(t *testing.T, msg *icmp.Message) []byte {
 	return buf
 }
 
-func unmarshal(t *testing.T, ipVer util.IPVersion, buf []byte) *icmp.Message {
-	t.Helper()
-	msg, err := icmp.ParseMessage(ipVer.ICMPProtoNum(), buf)
-	if err != nil {
-		t.Fatalf("Error unmarshaling message: %v", err)
-	}
-	return msg
-}
-
 func TestPingConnection(t *testing.T) {
 	if !supportedOS[runtime.GOOS] && syscall.Getuid() != 0 {
 		t.Skipf("Unsupported OS")

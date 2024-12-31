@@ -131,17 +131,6 @@ func (c *Conn) setTTL(ttl int) error {
 	}
 }
 
-func (c *Conn) localPort() int {
-	switch c.ipVer {
-	case util.IPv4:
-		return util.Port(c.connV4.LocalAddr())
-	case util.IPv6:
-		return util.Port(c.connV6.LocalAddr())
-	default:
-		return -1
-	}
-}
-
 // ReadFrom receives a reply. The received packet will likely not include any
 // payload that was initially sent.
 func (c *Conn) ReadFrom(ctx context.Context) (*backend.Packet, net.Addr, error) {

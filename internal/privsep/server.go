@@ -12,28 +12,9 @@ import (
 	"sync"
 
 	"github.com/pcekm/vasily/internal/backend"
-	"github.com/pcekm/vasily/internal/backend/icmp"
 	"github.com/pcekm/vasily/internal/privsep/messages"
 	"github.com/pcekm/vasily/internal/util"
 )
-
-type connMaker func() *icmp.PingConn
-
-func defaultNewIPv4Conn() *icmp.PingConn {
-	conn, err := icmp.New(util.IPv4)
-	if err != nil {
-		log.Panicf("Error opening IPv4 connection: %v", err)
-	}
-	return conn
-}
-
-func defaultNewIPv6Conn() *icmp.PingConn {
-	conn, err := icmp.New(util.IPv6)
-	if err != nil {
-		log.Panicf("Error opening IPv4 connection: %v", err)
-	}
-	return conn
-}
 
 // Handles messages from [privClient] and issues replies.
 type Server struct {

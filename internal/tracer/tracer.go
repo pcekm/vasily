@@ -146,25 +146,6 @@ func immediateTick(d time.Duration) <-chan time.Time {
 	return ch
 }
 
-func probe(conn backend.Conn, pkt *backend.Packet, dest net.Addr, ttl int) (*backend.Packet, error) {
-	if err := conn.WriteTo(pkt, dest, backend.TTLOption{TTL: ttl}); err != nil {
-		return nil, fmt.Errorf("error sending ping: %v", err)
-	}
-	pkt.Seq++
-	recvPkt, peer, err := readSeq(conn, pkt.Seq-1)
-	if err != nil {
-		if errors.Is(err, backend.ErrTimeout) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("read error: %v", err)
-	}
-	if recvPkt.Type == backend.PacketDestinationUnreachable {
-		return nil, fmt.Errorf("destination unreachable: %v", peer)
-	}
-
-	return recvPkt, nil
-}
-
 func readSeq(conn backend.Conn, seq int) (*backend.Packet, net.Addr, error) {
 	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
 	defer cancel()

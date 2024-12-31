@@ -102,15 +102,6 @@ func (h *serverHarness) Read() messages.Message {
 	return msg
 }
 
-// Captures a panic, or returns nil if no panic.
-func capturePanic(f func()) (r any) {
-	defer func() {
-		r = recover()
-	}()
-	f()
-	return nil
-}
-
 func TestShutdown(t *testing.T) {
 	h := newServerHarness(t)
 	defer h.Close()
