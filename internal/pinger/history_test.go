@@ -5,28 +5,27 @@ import (
 	"testing"
 	"time"
 
-	"code.cloudfoundry.org/clock/fakeclock"
 	"github.com/google/go-cmp/cmp"
 )
 
 func TestAdd(t *testing.T) {
-	c := fakeclock.NewFakeClock(time.Now())
+	now := time.Now()
 	h := newHistory(1)
-	h.clock = c
-	h.Add(0)
-	if diff := cmp.Diff(PingResult{Type: Waiting, Time: c.Now()}, h.Get(0)); diff != "" {
+	h.Add(0, now)
+	if diff := cmp.Diff(PingResult{Type: Waiting, Time: now}, h.Get(0)); diff != "" {
 		t.Errorf("Wrong ping result (-want, +got):\n%v", diff)
 	}
 }
 
 func TestAdd_WrongSeq(t *testing.T) {
+	now := time.Now()
 	h := newHistory(1)
 	var got any
 	func() {
 		defer func() {
 			got = recover()
 		}()
-		h.Add(1)
+		h.Add(1, now)
 	}()
 	if diff := cmp.Diff("Wrong sequence number: 1 (want 0)", got); diff != "" {
 		t.Errorf("Wrong panic result (-want, +got):\n%v", diff)
@@ -41,26 +40,25 @@ func TestGet_Empty(t *testing.T) {
 }
 
 func TestGet_Missing(t *testing.T) {
+	now := time.Now()
 	h := newHistory(1)
-	h.Add(0)
-	h.Add(1)
+	h.Add(0, now)
+	h.Add(1, now.Add(1*time.Second))
 	if diff := cmp.Diff(PingResult{}, h.Get(0)); diff != "" {
 		t.Errorf("Wrong ping result (-want, +got):\n%v", diff)
 	}
 }
 
 func TestStats(t *testing.T) {
-	start := time.Now()
-	c := fakeclock.NewFakeClock(start)
+	now := time.Now()
 	h := newHistory(4)
-	h.clock = c
 
 	addIncRec := func(seq, ms int, tp ResultType) {
-		h.Add(seq)
-		c.Increment(time.Duration(ms) * time.Millisecond)
+		h.Add(seq, now)
+		now = now.Add(time.Duration(ms) * time.Millisecond)
 		res := h.Get(seq)
 		res.Type = tp
-		h.Record(seq, res)
+		h.Record(seq, res, now)
 	}
 
 	addIncRec(0, 10, Success)
@@ -81,17 +79,15 @@ func TestStats(t *testing.T) {
 }
 
 func TestStats_Overflow(t *testing.T) {
-	start := time.Now()
-	c := fakeclock.NewFakeClock(start)
+	now := time.Now()
 	h := newHistory(4)
-	h.clock = c
 
 	addIncRec := func(seq, ms int, tp ResultType) {
-		h.Add(seq)
-		c.Increment(time.Duration(ms) * time.Millisecond)
+		h.Add(seq, now)
+		now = now.Add(time.Duration(ms) * time.Millisecond)
 		res := h.Get(seq)
 		res.Type = tp
-		h.Record(seq, res)
+		h.Record(seq, res, now)
 	}
 
 	addIncRec(0, 10, Dropped)
@@ -123,17 +119,16 @@ func TestStats_Empty(t *testing.T) {
 }
 
 func TestRevResults(t *testing.T) {
-	start := time.Now()
-	c := fakeclock.NewFakeClock(start)
 	h := newHistory(4)
-	h.clock = c
+	start := time.Now()
+	now := start
 
 	addIncRec := func(seq, ms int, tp ResultType) {
-		h.Add(seq)
-		c.Increment(time.Duration(ms) * time.Millisecond)
+		h.Add(seq, now)
+		now = now.Add(time.Duration(ms) * time.Millisecond)
 		res := h.Get(seq)
 		res.Type = tp
-		h.Record(seq, res)
+		h.Record(seq, res, now)
 	}
 
 	addIncRec(0, 10, Dropped)
@@ -160,17 +155,16 @@ func TestRevResults(t *testing.T) {
 }
 
 func TestHistoryFunc(t *testing.T) {
-	start := time.Now()
-	c := fakeclock.NewFakeClock(start)
 	h := newHistory(4)
-	h.clock = c
+	start := time.Now()
+	now := start
 
 	addIncRec := func(seq, ms int, tp ResultType) {
-		h.Add(seq)
-		c.Increment(time.Duration(ms) * time.Millisecond)
+		h.Add(seq, now)
+		now = now.Add(time.Duration(ms) * time.Millisecond)
 		res := h.Get(seq)
 		res.Type = tp
-		h.Record(seq, res)
+		h.Record(seq, res, now)
 	}
 
 	addIncRec(0, 10, Dropped)
@@ -194,17 +188,16 @@ func TestHistoryFunc(t *testing.T) {
 }
 
 func TestLatest(t *testing.T) {
-	start := time.Now()
-	c := fakeclock.NewFakeClock(start)
 	h := newHistory(4)
-	h.clock = c
+	start := time.Now()
+	now := start
 
 	addIncRec := func(seq, ms int, tp ResultType) {
-		h.Add(seq)
-		c.Increment(time.Duration(ms) * time.Millisecond)
+		h.Add(seq, now)
+		now = now.Add(time.Duration(ms) * time.Millisecond)
 		res := h.Get(seq)
 		res.Type = tp
-		h.Record(seq, res)
+		h.Record(seq, res, now)
 	}
 
 	addIncRec(0, 10, Dropped)

@@ -17,9 +17,6 @@ import (
 )
 
 func (c *internalConn) ReadFrom() (*backend.Packet, net.Addr, listenerKey, error) {
-	c.readMu.Lock()
-	defer c.readMu.Unlock()
-
 	buf := make([]byte, maxMTU)
 	var n int
 	var peer net.Addr

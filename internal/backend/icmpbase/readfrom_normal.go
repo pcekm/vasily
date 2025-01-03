@@ -15,8 +15,6 @@ import (
 
 // ReadFrom Reads an ICMP message.
 func (c *internalConn) ReadFrom() (*backend.Packet, net.Addr, listenerKey, error) {
-	c.readMu.Lock()
-	defer c.readMu.Unlock()
 	buf := make([]byte, maxMTU)
 	n, peer, err := c.conn.ReadFrom(buf)
 	if err != nil {

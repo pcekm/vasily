@@ -46,7 +46,7 @@ func New(ipVer util.IPVersion, id, proto int) (*Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	receiver := make(chan readResult)
+	receiver := make(chan readResult, 1)
 	id = svc.RegisterReader(id, proto, receiver)
 
 	return &Conn{

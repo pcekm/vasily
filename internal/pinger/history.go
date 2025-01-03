@@ -7,8 +7,6 @@ import (
 	"slices"
 	"sync"
 	"time"
-
-	"code.cloudfoundry.org/clock"
 )
 
 // Stats holds statistics for a ping session.
@@ -40,14 +38,12 @@ type pingHistory struct {
 	m2      time.Duration
 	len     int
 	lastSeq int
-	clock   clock.Clock
 }
 
 func newHistory(n int) *pingHistory {
 	return &pingHistory{
 		history: make([]PingResult, n),
 		lastSeq: -1,
-		clock:   clock.NewClock(),
 	}
 }
 
@@ -64,27 +60,27 @@ func (h *pingHistory) Get(seq int) PingResult {
 
 // Add records a ping that has just been sent. The seq arg must match the next
 // sequence number, and panics if it doesn't.
-func (h *pingHistory) Add(seq int) {
+func (h *pingHistory) Add(seq int, now time.Time) {
 	if h.lastSeq+1 != seq {
 		log.Panicf("Wrong sequence number: %d (want %d)", seq, h.lastSeq+1)
 	}
 	i := seq % len(h.history)
 	h.history[i] = PingResult{
 		Type: Waiting,
-		Time: h.clock.Now(),
+		Time: now,
 	}
 	h.lastSeq = seq
 }
 
 // Records sets the result for the given sequence number. Returns the PingResult
 // updated with latency.
-func (h *pingHistory) Record(seq int, r PingResult) PingResult {
+func (h *pingHistory) Record(seq int, r PingResult, now time.Time) PingResult {
 	if h.lastSeq-seq >= len(h.history) {
 		log.Printf("Seq %d too late to record in history.", seq)
 		return r
 	}
 	i := seq % len(h.history)
-	r.Latency = h.clock.Since(r.Time)
+	r.Latency = now.Sub(r.Time)
 	h.history[i] = r
 	if r.Type != Duplicate {
 		h.addStatsFor(r)
@@ -108,7 +104,7 @@ func (h *pingHistory) addStatsFor(r PingResult) {
 
 // RevResults iterates over sequence#, result from newest to oldest.
 // Note: This locks the mutex for the lifetime of the iterator.
-func (h *pingHistory) RevResults(mu *sync.Mutex) iter.Seq2[int, PingResult] {
+func (h *pingHistory) RevResults(mu sync.Locker) iter.Seq2[int, PingResult] {
 	return func(yield func(k int, v PingResult) bool) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -126,7 +122,7 @@ func (h *pingHistory) RevResults(mu *sync.Mutex) iter.Seq2[int, PingResult] {
 
 // History returns the ping history.
 // Deprecated: Use RevResults() and iterate.
-func (h *pingHistory) History(mu *sync.Mutex) []PingResult {
+func (h *pingHistory) History(mu sync.Locker) []PingResult {
 	var res []PingResult
 	for _, r := range h.RevResults(mu) {
 		res = append(res, r)
