@@ -21,9 +21,10 @@ type internalConn struct {
 	// Uses write locks for custom TTLs, and read locks for sends on the default
 	// TTL. This allows concurrent writes for the more common case, and only
 	// fully locks to set the TTL, write, and reset the TTL atomically.
-	ttlMu sync.RWMutex
-	conn  net.PacketConn
-	file  *os.File
+	ttlMu  sync.RWMutex
+	readMu sync.Mutex
+	conn   net.PacketConn
+	file   *os.File
 }
 
 // Close closes the connection.

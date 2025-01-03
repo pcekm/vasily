@@ -141,7 +141,7 @@ type Pinger struct {
 	opts *Options
 	done chan any
 
-	mu   sync.RWMutex
+	mu   sync.Mutex
 	hist *pingHistory
 }
 
@@ -170,27 +170,27 @@ func (p *Pinger) Close() error {
 // Latest returns the most recent ping result or the zero result if no results
 // are available.
 func (p *Pinger) Latest() PingResult {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	return p.hist.Latest()
 }
 
 // RevResults iterates over sequence#, result from newest to oldest.
 // Note: This locks the mutex for the lifetime of the iterator.
 func (p *Pinger) RevResults() iter.Seq2[int, PingResult] {
-	return p.hist.RevResults(p.mu.RLocker())
+	return p.hist.RevResults(&p.mu)
 }
 
 // History returns the ping history.
 // Deprecated: Use RevResults() and iterate.
 func (p *Pinger) History() []PingResult {
-	return p.hist.History(p.mu.RLocker())
+	return p.hist.History(&p.mu)
 }
 
 // Stats returns ping statistics.
 func (p *Pinger) Stats() Stats {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	return p.hist.Stats()
 }
 
@@ -271,13 +271,14 @@ func (p *Pinger) sendLoop(sentSeqs chan<- int) {
 
 // Sends a ping.
 func (p *Pinger) sendPing(seq int) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	pkt := &backend.Packet{Seq: seq}
 	if err := p.conn.WriteTo(pkt, p.dest); err != nil {
 		return fmt.Errorf("error pinging %v: %v", p.dest, err)
 	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.hist.Add(seq, time.Now())
+	p.hist.Add(seq)
 	return nil
 }
 
@@ -295,7 +296,6 @@ func (p *Pinger) receiveLoop(received chan<- readResult) {
 }
 
 func (p *Pinger) handleReply(pkt *backend.Packet, peer net.Addr) {
-	now := time.Now() // Record time before any lock contention delays
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -305,7 +305,7 @@ func (p *Pinger) handleReply(pkt *backend.Packet, peer net.Addr) {
 	if t := res.Type; t != Waiting && t != Dropped {
 		log.Printf("Duplicate packet: %v", pkt)
 		res.Type = Duplicate
-		res = p.hist.Record(pkt.Seq, res, now)
+		res = p.hist.Record(pkt.Seq, res)
 		return
 	}
 
@@ -321,12 +321,11 @@ func (p *Pinger) handleReply(pkt *backend.Packet, peer net.Addr) {
 		res.Type = Unreachable
 	}
 
-	res = p.hist.Record(pkt.Seq, res, now)
+	res = p.hist.Record(pkt.Seq, res)
 }
 
 // Records a timeout if necessary.
 func (p *Pinger) maybeRecordTimeout(seq int) {
-	now := time.Now() // Record time before any lock contention delays
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	res := p.hist.Get(seq)
@@ -334,5 +333,5 @@ func (p *Pinger) maybeRecordTimeout(seq int) {
 		return
 	}
 	res.Type = Dropped
-	res = p.hist.Record(seq, res, now)
+	res = p.hist.Record(seq, res)
 }

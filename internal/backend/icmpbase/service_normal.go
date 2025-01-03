@@ -50,7 +50,8 @@ type icmpService struct {
 	conn  *internalConn
 	done  chan struct{}
 
-	listeners sync.Map
+	sync.Mutex
+	listeners map[listenerKey]chan<- readResult
 }
 
 func newICMPService(ipVer util.IPVersion) (*icmpService, error) {
@@ -59,9 +60,10 @@ func newICMPService(ipVer util.IPVersion) (*icmpService, error) {
 		return nil, err
 	}
 	s := &icmpService{
-		ipVer: ipVer,
-		conn:  conn,
-		done:  make(chan struct{}),
+		ipVer:     ipVer,
+		conn:      conn,
+		done:      make(chan struct{}),
+		listeners: make(map[listenerKey]chan<- readResult),
 	}
 	go s.readLoop()
 	return s, nil
@@ -93,12 +95,13 @@ func (s *icmpService) sendToReceiver(pkt *backend.Packet, peer net.Addr, key lis
 		return
 	}
 
-	rcvr, ok := s.listeners.Load(key)
-	if !ok {
+	s.Lock()
+	defer s.Unlock()
+	rcvr := s.listeners[key]
+	if rcvr == nil {
 		return
 	}
-
-	rcvr.(chan<- readResult) <- readResult{
+	rcvr <- readResult{
 		Pkt:  pkt,
 		Peer: peer,
 		ID:   key.ID,
@@ -113,18 +116,19 @@ func (s *icmpService) WriteTo(b []byte, peer net.Addr, opts ...backend.WriteOpti
 // ID is 0, an ID will be assigned. The provided or assigned id will be
 // returned.
 func (s *icmpService) RegisterReader(id, proto int, receiver chan<- readResult) int {
+	s.Lock()
+	defer s.Unlock()
 	if id == 0 {
 		id = util.GenID()
 	}
-	s.listeners.Store(listenerKey{ID: id, Proto: proto}, receiver)
+	s.listeners[listenerKey{ID: id, Proto: proto}] = receiver
 	return id
 }
 
 func (s *icmpService) UnregisterReader(id, proto int) {
+	s.Lock()
+	defer s.Unlock()
 	key := listenerKey{ID: id, Proto: proto}
-	rcvr, ok := s.listeners.LoadAndDelete(key)
-	if !ok {
-		return
-	}
-	close(rcvr.(chan<- readResult))
+	close(s.listeners[key])
+	delete(s.listeners, key)
 }
